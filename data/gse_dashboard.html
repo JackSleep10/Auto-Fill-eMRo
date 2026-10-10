@@ -1,0 +1,2056 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Lion Air — GSE Work Order Automation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #0F172A;
+      color: #F8FAFC;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col custom-scrollbar">
+
+  <!-- Top Navbar -->
+  <header class="bg-slate-900/90 backdrop-blur border-b border-slate-800 sticky top-0 z-50 px-3 sm:px-4 py-2.5 sm:py-3 shadow-md">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
+      <!-- Left: Logo & Brand -->
+      <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center shadow-lg shadow-rose-600/30 flex-shrink-0">
+          <i class="fa-solid fa-truck-ramp-box text-white text-sm sm:text-lg"></i>
+        </div>
+        <div class="min-w-0">
+          <h1 class="font-bold text-sm sm:text-base leading-tight flex items-center gap-1.5 truncate">
+            <span class="text-white">GSE W/O</span>
+            <span class="text-[10px] font-semibold px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">TLM</span>
+          </h1>
+          <p class="text-[11px] text-slate-400 hidden sm:block truncate">Thai Lion Air — Ground Support Equipment Automation</p>
+        </div>
+      </div>
+
+      <!-- Right: Actions & User -->
+      <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        <a href="https://docs.google.com/spreadsheets/d/1luje0x1QXrhhucSvmO6h_k5Es91X8rCcJeP2Fet7uYs/edit" target="_blank"
+           class="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 transition">
+          <i class="fa-solid fa-file-excel"></i>
+          <span>Sheets</span>
+        </a>
+        <div id="statusBadge" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-slate-300 font-mono">Ready</span>
+        </div>
+        <div id="ipBadge" onclick="copyIpLink()" title="คลิกเพื่อคัดลอกลิงก์ IP (เข้าได้ทุกเครื่องในวง Wi-Fi / LAN เดียวกัน)"
+             class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 text-xs hover:bg-sky-500/20 transition cursor-pointer select-none">
+          <i class="fa-solid fa-network-wired text-[11px]"></i>
+          <span id="ipBadgeText" class="font-mono text-xs">IP: ...</span>
+        </div>
+        <div class="flex items-center gap-1.5 pl-1.5 border-l border-slate-800">
+          <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-xs font-mono text-slate-300" title="ผู้ใช้งานปัจจุบัน">
+            <i class="fa-solid fa-circle-user text-rose-400 text-xs"></i>
+            <span id="currentUserLabel" class="font-bold text-white text-xs">...</span>
+            <span id="emroBadge" class="hidden text-[10px] px-1.5 py-0.5 rounded font-sans"></span>
+          </div>
+          <a href="/logout" title="ออกจากระบบ"
+             class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white border border-slate-700 hover:border-rose-500 text-xs transition flex items-center gap-1 font-sans">
+            <i class="fa-solid fa-right-from-bracket"></i>
+            <span class="hidden md:inline">Logout</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <div class="bg-slate-900 border-b border-slate-800 px-2 sm:px-4 sticky top-[49px] sm:top-[65px] z-40">
+    <div class="max-w-7xl mx-auto flex space-x-1.5 sm:space-x-2 overflow-x-auto py-2 custom-scrollbar touch-pan-x" style="-webkit-overflow-scrolling: touch;">
+      <button onclick="switchTab('batch')" id="tabBtn-batch" class="tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2 whitespace-nowrap flex-shrink-0 bg-rose-600 text-white shadow-md shadow-rose-600/20">
+        <i class="fa-solid fa-layer-group"></i>
+        <span>เปิดใบงานชุด (Batch PM)</span>
+      </button>
+      <button onclick="switchTab('single')" id="tabBtn-single" class="tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2 whitespace-nowrap flex-shrink-0 text-slate-400 hover:text-white hover:bg-slate-800 transition">
+        <i class="fa-solid fa-bolt"></i>
+        <span>แจ้งซ่อมด่วน (Ad-Hoc CM)</span>
+      </button>
+      <button onclick="switchTab('results')" id="tabBtn-results" class="tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2 whitespace-nowrap flex-shrink-0 text-slate-400 hover:text-white hover:bg-slate-800 transition">
+        <i class="fa-solid fa-clipboard-check"></i>
+        <span>ผลลัพธ์รอบนี้</span>
+        <span id="resultsCountBadge" class="text-[11px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">0</span>
+      </button>
+      <button onclick="switchTab('history')" id="tabBtn-history" class="tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2 whitespace-nowrap flex-shrink-0 text-slate-400 hover:text-white hover:bg-slate-800 transition">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span>ประวัติใบงานทั้งหมด (History)</span>
+        <span id="historyTotalBadge" class="text-[11px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">0</span>
+      </button>
+      <button onclick="switchTab('master')" id="tabBtn-master" class="tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2 whitespace-nowrap flex-shrink-0 text-slate-400 hover:text-white hover:bg-slate-800 transition">
+        <i class="fa-solid fa-database"></i>
+        <span>ฐานข้อมูล GSE</span>
+        <span id="masterTotalBadge" class="text-[11px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">884</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
+
+    <!-- ==================== TAB 1: BATCH PM CREATOR ==================== -->
+    <div id="tab-batch" class="space-y-4 sm:space-y-6">
+      
+      <!-- Top Info Banner -->
+      <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-3.5 sm:p-5 rounded-2xl border border-slate-700/60 shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+        <div class="space-y-1">
+          <h2 class="text-sm sm:text-base md:text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-calendar-check text-rose-500"></i>
+            ระบบเปิดใบงาน PM อัตโนมัติ (Batch Scheduled W/O)
+          </h2>
+          <p class="text-xs text-slate-400">
+            ใส่รายการรหัสอุปกรณ์ GSE เลือกรอบเดือน PM ระบบจะเปิดใบงานบน eMRO ดึง S/N และสร้างเลข W/O ให้อัตโนมัติ
+          </p>
+        </div>
+        <div class="grid grid-cols-3 sm:flex items-center gap-1.5 sm:gap-3 text-[11px] sm:text-xs text-slate-400 bg-slate-950/60 px-3 py-2 rounded-xl border border-slate-800 w-full sm:w-auto text-center sm:text-left">
+          <div><span class="text-slate-500">Cat:</span> <b class="text-slate-200">GSE MAIN</b></div>
+          <span class="hidden sm:inline text-slate-700">|</span>
+          <div><span class="text-slate-500">Company:</span> <b class="text-slate-200">TLM</b></div>
+          <span class="hidden sm:inline text-slate-700">|</span>
+          <div><span class="text-slate-500">Priority:</span> <b class="text-emerald-400">SCHED</b></div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left: Input & Configuration (5 cols) -->
+        <div class="lg:col-span-5 space-y-5">
+          
+          <!-- PM Cycle Selector -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <i class="fa-regular fa-clock text-rose-400 mr-1"></i> เลือกรอบ PM (Description)
+            </label>
+            <div class="space-y-2">
+              <div class="grid grid-cols-4 gap-2">
+                <button type="button" onclick="selectCycle('PM OCT')" class="cycle-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/30 text-rose-300 border border-rose-500/50 hover:bg-rose-600 hover:text-white transition">PM OCT</button>
+                <button type="button" onclick="selectCycle('PM NOV')" class="cycle-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">PM NOV</button>
+                <button type="button" onclick="selectCycle('PM DEC')" class="cycle-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">PM DEC</button>
+                <button type="button" onclick="selectCycle('PM JAN')" class="cycle-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">PM JAN</button>
+              </div>
+              <div class="grid grid-cols-3 gap-2">
+                <button type="button" onclick="selectCycle('PM A')" class="cycle-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">PM A</button>
+                <button type="button" onclick="selectCycle('PM B')" class="cycle-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">PM B</button>
+                <button type="button" onclick="selectCycle('PM C')" class="cycle-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">PM C</button>
+              </div>
+            </div>
+            <div>
+              <input type="text" id="cycleInput" value="PM OCT" oninput="onCycleInput(this.value)" placeholder="พิมพ์รอบ PM หรือข้อความเอง เช่น PM JUN, PM A..."
+                     class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-sm font-mono text-white focus:outline-none focus:border-rose-500 uppercase">
+              <p class="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1.5">
+                <i class="fa-solid fa-pen-to-square text-rose-400"></i>
+                <span>ช่องนี้<b>พิมพ์ระบุเองได้อิสระ</b> หรือจะกดเลือกปุ่มลัดด้านบนก็ได้</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Paste Box from Excel -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <i class="fa-solid fa-paste text-amber-400 mr-1"></i> วางรายการจาก Excel / Sheets
+              </label>
+              <span class="text-xs text-slate-500">1 คอลัมน์ หรือ 2 คอลัมน์</span>
+            </div>
+            <textarea id="pasteBox" rows="6" placeholder="ก๊อปปี้คอลัมน์รหัสอุปกรณ์มาวางที่นี่ได้เลย เช่น:&#10;TLM-TB-048&#10;TLM-TB-049&#10;TLM-FL-001&#10;TLM-GP-007"
+                      class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-white focus:outline-none focus:border-rose-500 custom-scrollbar uppercase"></textarea>
+            
+            <div class="flex gap-2">
+              <button onclick="parseAndAddPaste()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-plus text-rose-400"></i> แปลงและเพิ่มเข้าคิว
+              </button>
+              <button onclick="document.getElementById('pasteBox').value=''" class="px-3 bg-slate-800 hover:bg-slate-700 text-slate-400 py-2 rounded-xl text-xs transition">
+                ล้าง
+              </button>
+            </div>
+          </div>
+
+          <!-- Search & Add Single Item -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+            <label class="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <i class="fa-solid fa-magnifying-glass text-sky-400 mr-1"></i> ค้นหาอุปกรณ์ทีละชิ้น
+            </label>
+            <div class="relative">
+              <input type="text" id="quickSearchInput" oninput="onSearchGse(this.value)" placeholder="พิมพ์รหัส เช่น TB-048, FL-001..."
+                     class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-sky-500 uppercase">
+              <div id="searchDropdown" class="hidden absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-h-56 overflow-y-auto z-40 custom-scrollbar"></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right: Queue Table & Execution Control (7 cols) -->
+        <div class="lg:col-span-7 space-y-5">
+          
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                  <i class="fa-solid fa-list-check text-rose-400"></i>
+                  รายการที่รอเปิดใบงาน
+                  <span id="queueBadge" class="text-xs font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">0 รายการ</span>
+                </h3>
+              </div>
+              <button onclick="clearQueue()" class="text-xs text-slate-400 hover:text-rose-400 transition">
+                <i class="fa-regular fa-trash-can mr-1"></i> ล้างคิวทั้งหมด
+              </button>
+            </div>
+
+            <!-- View Mode Switcher for Queue -->
+            <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+              <span class="text-[11px] text-slate-400 font-semibold" id="queueItemsCountInfo">ในคิว 0 รายการ</span>
+              <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs">
+                <button type="button" onclick="setQueueViewMode('card')" id="btnQueueViewCard" class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition bg-rose-600 text-white shadow-sm">
+                  <i class="fa-solid fa-table-cells-large"></i> การ์ด (Card)
+                </button>
+                <button type="button" onclick="setQueueViewMode('table')" id="btnQueueViewTable" class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition text-slate-400 hover:text-white">
+                  <i class="fa-solid fa-table-list"></i> ตาราง (Table)
+                </button>
+              </div>
+            </div>
+
+            <!-- Mode 1: Mobile Friendly Queue Cards View -->
+            <div id="queueCardsView" class="space-y-2.5 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+              <!-- Rendered via JS -->
+            </div>
+
+            <!-- Mode 2: Queue Table Wrapper -->
+            <div id="queueTableWrapper" class="hidden">
+              <div class="flex items-center justify-between text-[11px] text-slate-500 sm:hidden pb-1">
+                <span><i class="fa-solid fa-arrows-left-right text-slate-400 mr-1"></i> เลื่อนตารางดูซ้าย-ขวา</span>
+              </div>
+              <div class="border border-slate-800 rounded-xl overflow-x-auto max-h-80 custom-scrollbar touch-pan-x" style="-webkit-overflow-scrolling: touch;">
+                <table class="w-full text-left text-xs min-w-[480px]">
+                  <thead class="bg-slate-950 text-slate-400 uppercase tracking-wider sticky top-0 border-b border-slate-800 font-mono">
+                    <tr>
+                      <th class="p-2.5 sm:p-3 w-10 whitespace-nowrap">#</th>
+                      <th class="p-2.5 sm:p-3 whitespace-nowrap">GSE NO.</th>
+                      <th class="p-2.5 sm:p-3 whitespace-nowrap">ประเภท / เครื่องยนต์</th>
+                      <th class="p-2.5 sm:p-3 whitespace-nowrap">Description</th>
+                      <th class="p-2.5 sm:p-3 text-center w-14 whitespace-nowrap">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="queueTableBody" class="divide-y divide-slate-800/60 font-mono">
+                    <tr>
+                      <td colspan="5" class="p-8 text-center text-slate-500 font-sans">
+                        ยังไม่มีรายการในคิว กรุณาวางรหัสอุปกรณ์จาก Excel หรือค้นหาด้านซ้าย
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Action Button -->
+            <div class="pt-2">
+              <button id="startBatchBtn" onclick="startBatchCreation()" disabled
+                      class="w-full bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-rose-600/25 transition flex items-center justify-center gap-2 text-sm">
+                <i class="fa-solid fa-paper-plane"></i>
+                เริ่มเปิดใบงานทั้งหมด (Start Batch Creation)
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Progress & Console Box -->
+          <div id="progressSection" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+                <span id="progressTitle" class="text-sm font-bold text-white">กำลังเปิดใบงาน...</span>
+              </div>
+              <span id="progressPercent" class="text-xs font-mono text-rose-400 font-bold">0%</span>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-950 rounded-full h-2.5 border border-slate-800 overflow-hidden">
+              <div id="progressBar" class="bg-gradient-to-r from-rose-500 to-amber-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+
+            <!-- Log Console -->
+            <div class="bg-slate-950 rounded-xl p-3.5 border border-slate-800 font-mono text-xs max-h-48 overflow-y-auto custom-scrollbar space-y-1" id="logConsole">
+              <div class="text-slate-500">// รอเริ่มงาน...</div>
+            </div>
+
+            <!-- Live Screen Preview -->
+            <div class="pt-2 border-t border-slate-800 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-desktop text-sky-400"></i> หน้าจอการทำงานสดบน eMRO (Live Screen)
+                </span>
+                <span class="text-[10px] text-slate-500 font-mono">อัปเดตอัตโนมัติ</span>
+              </div>
+              <div class="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 flex items-center justify-center min-h-[220px]">
+                <img id="liveScreenImg" src="/api/live-screenshot" alt="Live eMRO Screen"
+                     class="w-full h-auto object-contain rounded-xl"
+                     onerror="this.style.display='none'; document.getElementById('liveScreenFallback').style.display='flex';"
+                     onload="this.style.display='block'; document.getElementById('liveScreenFallback').style.display='none';" />
+                <div id="liveScreenFallback" class="p-6 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
+                  <i class="fa-solid fa-spinner fa-spin text-lg text-slate-600"></i>
+                  <span>กำลังรอภาพหน้าจอจาก Browser eMRO...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ==================== TAB 2: QUICK AD-HOC CM ==================== -->
+    <div id="tab-single" class="hidden max-w-2xl mx-auto space-y-6">
+      
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm space-y-5">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-wrench text-amber-400"></i>
+            เปิดใบงานแจ้งซ่อมด่วน (Quick Unscheduled W/O)
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">
+            สำหรับกรณีมีอุปกรณ์เสียกะทันหัน หรือแจ้งซ่อมตามอาการ (Priority: UNSCHED)
+          </p>
+        </div>
+
+        <!-- GSE Equipment with Auto-Search & Suggestion -->
+        <div class="space-y-1.5 relative">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <span>รหัสอุปกรณ์ (GSE NO.)</span>
+              <span class="text-[11px] font-normal text-amber-400/90 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">พิมพ์แล้วดึงรหัสอัตโนมัติ</span>
+            </label>
+            <span id="adhocGseMatchCount" class="text-xs text-slate-400 hidden"></span>
+          </div>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+              <i class="fa-solid fa-magnifying-glass text-xs"></i>
+            </div>
+            <input type="text" id="adhocGse" placeholder="พิมพ์ค้นหา เช่น TLM-TB-048, 007, TRACTOR, GPU..."
+                   autocomplete="off"
+                   oninput="onAdhocGseInput(this.value)"
+                   onfocus="onAdhocGseInput(this.value)"
+                   onkeydown="onAdhocGseKeydown(event)"
+                   class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-9 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 uppercase font-mono transition">
+            <button type="button" id="adhocClearGseBtn" onclick="clearAdhocGse()" title="ล้างข้อความ" class="hidden absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-white transition">
+              <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+            
+            <!-- Autocomplete suggestions dropdown -->
+            <div id="adhocGseSuggestions" class="hidden absolute left-0 right-0 top-full mt-1.5 z-50 bg-slate-900/95 border border-slate-700 rounded-xl shadow-2xl max-h-72 overflow-y-auto divide-y divide-slate-800/80 backdrop-blur-md">
+            </div>
+          </div>
+
+          <!-- Selected equipment info card -->
+          <div id="adhocGseInfo" class="hidden p-2.5 rounded-xl bg-slate-900/90 border border-amber-500/30 flex items-center justify-between text-xs transition">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0"></span>
+              <span id="adhocGseInfoText" class="text-slate-200 truncate"></span>
+            </div>
+            <span id="adhocGseInfoBadge" class="flex-shrink-0 ml-2 px-2 py-0.5 rounded text-[11px] font-semibold"></span>
+          </div>
+        </div>
+
+        <!-- Quick Chips for Common Defect Description -->
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            เลือกอาการที่พบบ่อย (Quick Common Defects)
+          </label>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" onclick="setAdhocDesc('SIREN LIGHT IS NOT WORKING')" class="chip px-2.5 py-1 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700">💡 Siren Light Not Working</button>
+            <button type="button" onclick="setAdhocDesc('ENGINE CANNOT START')" class="chip px-2.5 py-1 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700">🔑 Engine Cannot Start</button>
+            <button type="button" onclick="setAdhocDesc('AIR CONDITIONER NOT COOLING')" class="chip px-2.5 py-1 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700">❄️ AC Not Cooling</button>
+            <button type="button" onclick="setAdhocDesc('BRAKE SYSTEM MALFUNCTION')" class="chip px-2.5 py-1 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700">🛑 Brake Malfunction</button>
+            <button type="button" onclick="setAdhocDesc('HYDRAULIC OIL LEAK')" class="chip px-2.5 py-1 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700">💧 Hydraulic Leak</button>
+            <button type="button" onclick="setAdhocDesc('BATTERY DEAD OR CHARGING ISSUE')" class="chip px-2.5 py-1 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700">🔋 Battery Issue</button>
+            <button type="button" onclick="setAdhocDesc('TIRE PUNCTURED OR DAMAGED')" class="chip px-2.5 py-1 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700">🛞 Tire Damaged</button>
+          </div>
+        </div>
+
+        <!-- Description Input -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-semibold uppercase tracking-wider text-slate-400">คำอธิบายอาการ (Description - ภาษาอังกฤษเท่านั้น)</label>
+            <span class="text-xs text-rose-400 font-semibold">* ENG Only</span>
+          </div>
+          <textarea id="adhocDesc" rows="3" placeholder="เช่น SIREN LIGHT IS NOT WORKING..."
+                    class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3.5 text-sm font-mono text-white focus:outline-none focus:border-amber-500 uppercase"></textarea>
+        </div>
+
+        <!-- Submit Button -->
+        <button id="adhocSubmitBtn" onclick="submitAdhocWo()"
+                class="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-amber-600/20 transition flex items-center justify-center gap-2 text-sm">
+          <i class="fa-solid fa-paper-plane"></i>
+          เปิดใบงานทันที (Create W/O Now)
+        </button>
+
+        <!-- Result Card -->
+        <div id="adhocResultCard" class="hidden p-4 rounded-xl border border-emerald-500/40 bg-emerald-950/20 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-circle-check"></i> สร้างใบงานสำเร็จเรียบร้อย!
+            </span>
+            <button onclick="copyText(document.getElementById('adhocWoNumber').innerText)" class="text-xs px-2.5 py-1 bg-emerald-600/30 text-emerald-300 rounded border border-emerald-500/40 hover:bg-emerald-600/50">
+              <i class="fa-regular fa-copy"></i> คัดลอก
+            </button>
+          </div>
+          <div class="text-2xl font-mono font-bold text-white" id="adhocWoNumber">-</div>
+          <div class="text-xs text-slate-400 font-mono" id="adhocWoDetails">-</div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ==================== TAB 3: RESULTS & SYNC ==================== -->
+    <div id="tab-results" class="hidden space-y-5">
+      
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-receipt text-emerald-400"></i>
+              รายการใบงานที่เปิดสำเร็จในรอบนี้ (W/O Results)
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">สามารถกดคัดลอกเลขทั้งหมดไปวางลงใน Excel / Google Sheets ได้ทันที</p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <button onclick="retryFailedItems()" id="retryFailedBtn" class="hidden flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/20">
+              <i class="fa-solid fa-arrows-rotate"></i> นำรายการที่ไม่สำเร็จกลับเข้าคิว (<span id="failedCountBadge">0</span>)
+            </button>
+            <button onclick="copyAllWoNumbers()" class="flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20">
+              <i class="fa-regular fa-copy"></i> คัดลอกเลข W/O ทั้งหมด
+            </button>
+            <button onclick="syncToSheetsNow()" class="flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-cloud-arrow-up text-sky-400"></i> ส่งเข้า Google Sheets
+            </button>
+          </div>
+        </div>
+
+        <!-- View Mode Switcher for Results -->
+        <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+          <span class="text-[11px] text-slate-400 font-semibold" id="resultsCountInfo">ผลลัพธ์ทั้งหมด 0 รายการ</span>
+          <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs">
+            <button type="button" onclick="setResultsViewMode('card')" id="btnResultsViewCard" class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition bg-emerald-600 text-white shadow-sm">
+              <i class="fa-solid fa-table-cells-large"></i> การ์ด (Card)
+            </button>
+            <button type="button" onclick="setResultsViewMode('table')" id="btnResultsViewTable" class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition text-slate-400 hover:text-white">
+              <i class="fa-solid fa-table-list"></i> ตาราง (Table)
+            </button>
+          </div>
+        </div>
+
+        <!-- Mode 1: Mobile Friendly Results Cards View -->
+        <div id="resultsCardsView" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[550px] overflow-y-auto custom-scrollbar pr-1">
+          <!-- Rendered via JS -->
+        </div>
+
+        <!-- Mode 2: Results Table Wrapper -->
+        <div id="resultsTableWrapper" class="hidden">
+          <div class="flex items-center justify-between text-[11px] text-slate-500 sm:hidden pb-1">
+            <span><i class="fa-solid fa-arrows-left-right text-slate-400 mr-1"></i> เลื่อนตารางดูซ้าย-ขวา</span>
+          </div>
+          <div class="border border-slate-800 rounded-xl overflow-x-auto max-h-[500px] custom-scrollbar touch-pan-x" style="-webkit-overflow-scrolling: touch;">
+            <table class="w-full text-left text-xs min-w-[650px]">
+              <thead class="bg-slate-950 text-slate-400 uppercase tracking-wider sticky top-0 border-b border-slate-800 font-mono">
+                <tr>
+                  <th class="p-2.5 sm:p-3 w-10 whitespace-nowrap">#</th>
+                  <th class="p-2.5 sm:p-3 whitespace-nowrap">GSE W/O NO.</th>
+                  <th class="p-2.5 sm:p-3 whitespace-nowrap">GSE CODE</th>
+                  <th class="p-2.5 sm:p-3 whitespace-nowrap">GSE S/N</th>
+                  <th class="p-2.5 sm:p-3 whitespace-nowrap">PRIORITY</th>
+                  <th class="p-2.5 sm:p-3 whitespace-nowrap">DESCRIPTION</th>
+                  <th class="p-2.5 sm:p-3 whitespace-nowrap">STATUS</th>
+                  <th class="p-2.5 sm:p-3 text-center w-14 whitespace-nowrap">คัดลอก</th>
+                </tr>
+              </thead>
+              <tbody id="resultsTableBody" class="divide-y divide-slate-800/60 font-mono">
+                <tr>
+                  <td colspan="8" class="p-8 text-center text-slate-500 font-sans">
+                    ยังไม่มีผลลัพธ์ในเซสชั่นนี้ เริ่มเปิดใบงานในแท็บ Batch หรือ Ad-Hoc
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ==================== TAB 4: FULL WORK ORDER HISTORY (PM & CM) ==================== -->
+    <div id="tab-history" class="hidden space-y-5">
+      
+      <!-- Top Stat Cards for History -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 text-lg flex-shrink-0">
+            <i class="fa-solid fa-receipt"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[11px] text-slate-400 font-medium">ใบงานทั้งหมด</div>
+            <div class="text-xl font-bold font-mono text-white" id="histTotalCount">0</div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-lg flex-shrink-0">
+            <i class="fa-solid fa-calendar-check"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[11px] text-emerald-400 font-medium">งานชุด PM (รอบเดือน)</div>
+            <div class="text-xl font-bold font-mono text-emerald-400" id="histPmCount">0</div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-lg flex-shrink-0">
+            <i class="fa-solid fa-wrench"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[11px] text-amber-400 font-medium">แจ้งซ่อมด่วน CM</div>
+            <div class="text-xl font-bold font-mono text-amber-400" id="histCmCount">0</div>
+          </div>
+        </div>
+
+        <a href="https://docs.google.com/spreadsheets/d/1BdMWDX9anf2wD1_yLTH3S1LRBSuWCIKPAjKUOpPIrhA/edit" target="_blank"
+           class="bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-2xl p-4 shadow-sm flex items-center gap-3 group transition cursor-pointer">
+          <div class="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/30 group-hover:bg-emerald-600/30 flex items-center justify-center text-emerald-400 text-lg flex-shrink-0 transition">
+            <i class="fa-solid fa-file-excel"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[11px] text-slate-400 group-hover:text-emerald-300 font-medium flex items-center gap-1 transition">
+              <span>ชีต LOG W/O</span>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+            </div>
+            <div class="text-xs font-semibold text-emerald-400 truncate">เปิด Master Log</div>
+          </div>
+        </a>
+      </div>
+
+      <!-- Main History Table Container -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-clock-rotate-left text-sky-400"></i>
+              ประวัติการเปิดใบงาน eMRO ทั้งหมด (Full Work Order History)
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">รวมประวัติใบงานทุกใบ (ทั้ง PM และ CM) ที่เคยเปิดผ่านระบบ พร้อมรายละเอียดและผู้สร้าง</p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <button onclick="fetchHistoryLogs()" class="flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center justify-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-arrows-rotate" id="histRefreshIcon"></i> รีเฟรช
+            </button>
+            <button onclick="copyHistoryWoNumbers()" class="flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20">
+              <i class="fa-regular fa-copy"></i> คัดลอกเลข W/O ทั้งหมด
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter and Search Bar -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-1">
+          <!-- Type Filter Pills -->
+          <div class="flex items-center gap-1.5 text-xs">
+            <button onclick="filterHistoryType('')" id="histFilter-all" class="hist-filter-pill px-3 py-1.5 rounded-lg bg-sky-600 text-white font-semibold transition">
+              ทั้งหมด (<span id="histPillAllCount">0</span>)
+            </button>
+            <button onclick="filterHistoryType('PM')" id="histFilter-pm" class="hist-filter-pill px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold transition">
+              🟢 PM (<span id="histPillPmCount">0</span>)
+            </button>
+            <button onclick="filterHistoryType('CM')" id="histFilter-cm" class="hist-filter-pill px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 font-semibold transition">
+              🟠 CM แจ้งซ่อม (<span id="histPillCmCount">0</span>)
+            </button>
+          </div>
+
+          <!-- Search Box -->
+          <div class="flex items-center gap-2">
+            <div class="relative w-full sm:w-72">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                <i class="fa-solid fa-magnifying-glass text-xs"></i>
+              </div>
+              <input type="text" id="histSearchInput" oninput="onSearchHistory(this.value)" placeholder="ค้นหา W/O, รหัส GSE, S/N, อาการ..."
+                     class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500 uppercase font-mono">
+            </div>
+
+            <!-- View Mode Switcher -->
+            <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs flex-shrink-0">
+              <button type="button" onclick="setHistoryViewMode('card')" id="btnHistViewCard" class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition text-slate-400 hover:text-white">
+                <i class="fa-solid fa-table-cells-large"></i>
+              </button>
+              <button type="button" onclick="setHistoryViewMode('table')" id="btnHistViewTable" class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition bg-sky-600 text-white shadow-sm">
+                <i class="fa-solid fa-table-list"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-[11px] text-slate-400 font-medium" id="histResultCountLabel">
+          กำลังโหลดประวัติ...
+        </div>
+
+        <!-- Mode 1: History Cards View -->
+        <div id="historyCardsView" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[550px] overflow-y-auto custom-scrollbar pr-1">
+          <!-- Rendered via JS -->
+        </div>
+
+        <!-- Mode 2: History Table Wrapper -->
+        <div id="historyTableWrapper">
+          <div class="border border-slate-800 rounded-xl overflow-x-auto max-h-[520px] custom-scrollbar touch-pan-x" style="-webkit-overflow-scrolling: touch;">
+            <table class="w-full text-left text-xs min-w-[700px]">
+              <thead class="bg-slate-950 text-slate-400 uppercase tracking-wider sticky top-0 border-b border-slate-800 font-mono text-[11px]">
+                <tr>
+                  <th class="p-2.5 w-10 text-center">#</th>
+                  <th class="p-2.5 w-36 whitespace-nowrap text-center">วัน & เวลา</th>
+                  <th class="p-2.5 w-20 text-center">ประเภท</th>
+                  <th class="p-2.5 w-32">เลข W/O</th>
+                  <th class="p-2.5 w-32">รหัส GSE</th>
+                  <th class="p-2.5 w-28">GSE S/N</th>
+                  <th class="p-2.5 min-w-[180px]">อาการ / รายละเอียด</th>
+                  <th class="p-2.5 w-24 text-center">ผู้เปิด</th>
+                  <th class="p-2.5 w-20 text-center">สถานะ</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody" class="divide-y divide-slate-800/60 font-mono">
+                <tr>
+                  <td colspan="9" class="p-8 text-center text-slate-500 font-sans">
+                    <i class="fa-solid fa-spinner fa-spin mr-1"></i> กำลังโหลดประวัติ...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ==================== TAB 5: MASTER INVENTORY ==================== -->
+    <div id="tab-master" class="hidden space-y-5">
+      
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-boxes-stacked text-sky-400"></i>
+              ฐานข้อมูลอุปกรณ์ GSE (DMK & สถานีทั้งหมด)
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5" id="masterCountHeader">รวม 884 ชิ้น พร้อมระบุ S/N, ประเภทเครื่องยนต์ (Motorize / Non Motorize)</p>
+          </div>
+
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+            <button type="button" onclick="syncMasterFromSheet()" id="syncMasterBtn" class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-sky-600/20 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-500/30 hover:border-transparent transition flex items-center justify-center gap-1.5 whitespace-nowrap shadow-sm">
+              <i class="fa-solid fa-arrows-rotate" id="syncMasterIcon"></i>
+              <span>ซิงค์ข้อมูลจาก Google Sheets</span>
+            </button>
+            <div class="w-full sm:w-64">
+              <input type="text" id="masterSearchInput" oninput="filterMasterTable(this.value)" placeholder="ค้นหา รหัส, ชนิด, รุ่น..."
+                     class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-sky-500 uppercase font-mono">
+            </div>
+          </div>
+        </div>
+
+        <!-- Status and Category Filters -->
+        <div class="space-y-2">
+          <!-- Status Filters -->
+          <div class="flex flex-wrap items-center gap-1.5 text-xs">
+            <span class="text-slate-500 mr-1 text-[11px] font-semibold">สถานะ eMRO:</span>
+            <button onclick="filterByEmroStatus('')" class="status-pill px-2.5 py-1 rounded-lg bg-sky-600 text-white font-medium">ทั้งหมด</button>
+            <button onclick="filterByEmroStatus('ACTIVE')" class="status-pill px-2.5 py-1 rounded-lg bg-slate-800 text-emerald-300 hover:bg-slate-700">🟢 ใช้งานได้ (ACTIVE: 823)</button>
+            <button onclick="filterByEmroStatus('INACTIVE')" class="status-pill px-2.5 py-1 rounded-lg bg-slate-800 text-rose-300 hover:bg-slate-700">🔴 ไม่ได้ใช้งานแล้ว (INACTIVE: 61)</button>
+          </div>
+
+          <!-- Category Filters -->
+          <div class="flex flex-wrap items-center gap-1.5 text-xs">
+            <span class="text-slate-500 mr-1 text-[11px] font-semibold">หมวดหมู่:</span>
+            <button onclick="filterMasterByCategory('')" class="cat-pill px-2.5 py-1 rounded-lg bg-sky-600 text-white font-medium">ทั้งหมด</button>
+            <button onclick="filterMasterByCategory('TB')" class="cat-pill px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">TB (Towbar)</button>
+            <button onclick="filterMasterByCategory('BC')" class="cat-pill px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">BC (Baggage Cart)</button>
+            <button onclick="filterMasterByCategory('PS')" class="cat-pill px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">PS (Pax Step)</button>
+            <button onclick="filterMasterByCategory('FL')" class="cat-pill px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">FL (Forklift)</button>
+            <button onclick="filterMasterByCategory('GP')" class="cat-pill px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">GP (Ground Power)</button>
+            <button onclick="filterMasterByCategory('AC')" class="cat-pill px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">AC (ACU)</button>
+            <button onclick="filterMasterByCategory('AS')" class="cat-pill px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">AS (ASU)</button>
+          </div>
+        </div>
+
+        <!-- View Mode Switcher -->
+        <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+          <span class="text-[11px] text-slate-400 font-semibold" id="masterItemsCountInfo">แสดงทั้งหมด</span>
+          <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs">
+            <button type="button" onclick="setMasterViewMode('card')" id="btnViewCard" class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition bg-sky-600 text-white">
+              <i class="fa-solid fa-table-cells-large"></i> การ์ด (Card)
+            </button>
+            <button type="button" onclick="setMasterViewMode('table')" id="btnViewTable" class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition text-slate-400 hover:text-white">
+              <i class="fa-solid fa-table-list"></i> ตาราง (Table)
+            </button>
+          </div>
+        </div>
+
+        <!-- Mode 1: Mobile Friendly Cards View -->
+        <div id="masterCardsView" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[550px] overflow-y-auto custom-scrollbar pr-1">
+          <!-- Rendered via JS -->
+        </div>
+
+        <!-- Mode 2: Full Table View -->
+        <div id="masterTableWrapper" class="hidden">
+          <div class="flex items-center justify-between text-[11px] text-slate-500 sm:hidden pb-1">
+            <span><i class="fa-solid fa-arrows-left-right text-slate-400 mr-1"></i> เลื่อนตารางดูซ้าย-ขวา</span>
+          </div>
+          <div class="border border-slate-800 rounded-xl overflow-x-auto max-h-[500px] custom-scrollbar touch-pan-x" style="-webkit-overflow-scrolling: touch;">
+            <table class="w-full text-left text-xs min-w-[850px]">
+              <thead class="bg-slate-950 text-slate-400 uppercase tracking-wider sticky top-0 border-b border-slate-800 font-mono">
+                <tr>
+                  <th class="p-3 whitespace-nowrap">GSE NO.</th>
+                  <th class="p-3 whitespace-nowrap">TYPE</th>
+                  <th class="p-3 whitespace-nowrap">ENGINE</th>
+                  <th class="p-3 whitespace-nowrap">eMRO STATUS</th>
+                  <th class="p-3 whitespace-nowrap">GSE S/N</th>
+                  <th class="p-3 whitespace-nowrap">BRAND / MODEL</th>
+                  <th class="p-3 whitespace-nowrap">STATION</th>
+                  <th class="p-3 text-center whitespace-nowrap">เปิด PM</th>
+                </tr>
+              </thead>
+              <tbody id="masterTableBody" class="divide-y divide-slate-800/60 font-mono">
+                <!-- Rendered via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <script>
+    // State
+    let queueItems = [];
+    let completedResults = [];
+    let allMasterList = [];
+    let activeCategoryFilter = '';
+    let activeStatusFilter = '';
+    let queueViewMode = (window.innerWidth < 768) ? 'card' : 'table';
+    let resultsViewMode = (window.innerWidth < 768) ? 'card' : 'table';
+    let masterViewMode = (window.innerWidth < 768) ? 'card' : 'table';
+
+    // Init
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchCurrentUser();
+      fetchMasterList();
+      checkBatchStatus();
+      fetchHistoryLogs();
+      setQueueViewMode(queueViewMode);
+      setResultsViewMode(resultsViewMode);
+      setMasterViewMode(masterViewMode);
+      setHistoryViewMode(historyViewMode);
+      setInterval(checkBatchStatus, 2500);
+    });
+
+    let isEmroConnected = false;
+    async function fetchCurrentUser() {
+      try {
+        const res = await fetch('/api/me');
+        const data = await res.json();
+        if (data.user) {
+          const el = document.getElementById('currentUserLabel');
+          if (el) el.innerText = data.user;
+          isEmroConnected = !!data.emro_connected;
+          const badge = document.getElementById('emroBadge');
+          if (badge) {
+            badge.classList.remove('hidden');
+            if (isEmroConnected) {
+              badge.className = "text-[10px] px-1.5 py-0.5 rounded font-sans font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+              badge.innerHTML = `<i class="fa-solid fa-link text-[9px] mr-1"></i>eMRO: เชื่อมต่อแล้ว`;
+            } else {
+              badge.className = "text-[10px] px-1.5 py-0.5 rounded font-sans font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse";
+              badge.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-[9px] mr-1"></i>ยังไม่ผูก eMRO`;
+            }
+          }
+        }
+        if (data.lan_ip) {
+          window.serverLanIp = data.lan_ip;
+          const ipEl = document.getElementById('ipBadgeText');
+          if (ipEl) ipEl.innerText = `${data.lan_ip}:8000`;
+        }
+      } catch (e) {
+        console.error("Failed to load user info:", e);
+      }
+    }
+
+    function copyIpLink() {
+      const ip = window.serverLanIp || '172.21.1.111';
+      const link = `http://${ip}:8000`;
+      navigator.clipboard.writeText(link).then(() => {
+        const ipEl = document.getElementById('ipBadgeText');
+        const orig = ipEl ? ipEl.innerText : '';
+        if (ipEl) ipEl.innerText = 'คัดลอกแล้ว!';
+        setTimeout(() => { if (ipEl) ipEl.innerText = orig; }, 1800);
+      }).catch(() => {
+        prompt("คัดลอกลิงก์ IP สำหรับเปิดในเครื่องอื่น:", link);
+      });
+    }
+
+    // Tab Navigation
+    function switchTab(tab) {
+      ['batch', 'single', 'results', 'history', 'master'].forEach(t => {
+        const el = document.getElementById(`tab-${t}`);
+        if (el) el.classList.add('hidden');
+        const btn = document.getElementById(`tabBtn-${t}`);
+        if (btn) btn.className = "tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2 whitespace-nowrap flex-shrink-0 text-slate-400 hover:text-white hover:bg-slate-800 transition";
+      });
+      const activeEl = document.getElementById(`tab-${tab}`);
+      if (activeEl) activeEl.classList.remove('hidden');
+      const activeBtn = document.getElementById(`tabBtn-${tab}`);
+      if (activeBtn) activeBtn.className = "tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2 whitespace-nowrap flex-shrink-0 bg-rose-600 text-white shadow-md shadow-rose-600/20";
+
+      if (tab === 'history') {
+        fetchHistoryLogs();
+      }
+    }
+
+    // Cycle Selection
+    function selectCycle(cycle) {
+      document.getElementById('cycleInput').value = cycle;
+      document.querySelectorAll('.cycle-btn').forEach(btn => {
+        if (btn.innerText === cycle) {
+          btn.className = "cycle-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/30 text-rose-300 border border-rose-500/50 hover:bg-rose-600 hover:text-white transition";
+        } else {
+          btn.className = "cycle-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition";
+        }
+      });
+    }
+
+    function onCycleInput(val) {
+      const v = (val || '').trim().toUpperCase();
+      document.querySelectorAll('.cycle-btn').forEach(btn => {
+        if (btn.innerText.toUpperCase() === v) {
+          btn.className = "cycle-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/30 text-rose-300 border border-rose-500/50 hover:bg-rose-600 hover:text-white transition";
+        } else {
+          btn.className = "cycle-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition";
+        }
+      });
+    }
+
+    // Fetch Master List
+    async function fetchMasterList() {
+      try {
+        const res = await fetch('/api/gse-master');
+        allMasterList = await res.json();
+        const badge = document.getElementById('masterTotalBadge');
+        if (badge) badge.innerText = allMasterList.length;
+        const header = document.getElementById('masterCountHeader');
+        if (header) header.innerText = `รวม ${allMasterList.length} ชิ้น พร้อมระบุ S/N, ประเภทเครื่องยนต์ (Motorize / Non Motorize)`;
+        renderMasterTable(allMasterList);
+      } catch (e) {
+        console.error("Failed to load master list:", e);
+      }
+    }
+
+    // Sync Master List from Google Sheets
+    async function syncMasterFromSheet() {
+      const btn = document.getElementById('syncMasterBtn');
+      const icon = document.getElementById('syncMasterIcon');
+      if (btn) btn.disabled = true;
+      if (icon) icon.classList.add('fa-spin');
+
+      try {
+        const res = await fetch('/api/sync-master-sheet', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          allMasterList = data.items;
+          const badge = document.getElementById('masterTotalBadge');
+          if (badge) badge.innerText = allMasterList.length;
+          const header = document.getElementById('masterCountHeader');
+          if (header) header.innerText = `รวม ${allMasterList.length} ชิ้น พร้อมระบุ S/N, ประเภทเครื่องยนต์ (Motorize / Non Motorize)`;
+          filterMasterTable(document.getElementById('masterSearchInput').value);
+          alert(`✅ ซิงค์ข้อมูลจาก Google Sheets สำเร็จ! อัปเดตข้อมูล ${data.count} รายการเรียบร้อยแล้ว`);
+        } else {
+          alert('❌ ซิงค์ข้อมูลล้มเหลว: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('❌ เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + e);
+      } finally {
+        if (btn) btn.disabled = false;
+        if (icon) icon.classList.remove('fa-spin');
+      }
+    }
+
+    // Parse and Add from Paste Box
+    function parseAndAddPaste() {
+      const text = document.getElementById('pasteBox').value.trim();
+      if (!text) return;
+
+      const defaultCycle = document.getElementById('cycleInput').value.trim().toUpperCase() || 'PM';
+      const lines = text.split(/\r?\n/);
+      let count = 0;
+
+      lines.forEach(line => {
+        const raw = line.trim();
+        if (!raw) return;
+
+        // Support Tab separated: GSE [TAB] Description
+        const parts = raw.split(/\t+/);
+        let gse = parts[0].trim().toUpperCase();
+        let desc = parts.length > 1 ? parts[1].trim().toUpperCase() : defaultCycle;
+
+        // Strip prefixes if user pasted whole row or extra punctuation
+        gse = gse.replace(/^["']|["']$/g, '');
+
+        if (gse) {
+          addToQueue(gse, desc, 'SCHED');
+          count++;
+        }
+      });
+
+      document.getElementById('pasteBox').value = '';
+      renderQueue();
+    }
+
+    // Search GSE Autocomplete
+    function onSearchGse(val) {
+      const dd = document.getElementById('searchDropdown');
+      const q = val.trim().toLowerCase();
+      if (!q) {
+        dd.classList.add('hidden');
+        return;
+      }
+
+      const matches = allMasterList.filter(item => 
+        item.gse.toLowerCase().includes(q) || item.type.toLowerCase().includes(q) || item.description.toLowerCase().includes(q)
+      ).slice(0, 10);
+
+      if (matches.length === 0) {
+        dd.innerHTML = `<div class="p-3 text-xs text-slate-500 text-center">ไม่พบอุปกรณ์ '${val}'</div>`;
+      } else {
+        dd.innerHTML = matches.map(m => `
+          <div onclick="addSingleFromSearch('${m.gse}')" class="p-2.5 hover:bg-slate-800 cursor-pointer border-b border-slate-800/60 last:border-0 flex items-center justify-between">
+            <div>
+              <div class="font-mono font-bold text-white text-xs flex items-center gap-2">
+                ${m.gse}
+                <span class="text-[10px] px-1.5 py-0.2 rounded font-semibold ${m.emro_status === 'INACTIVE' ? 'bg-rose-600/30 text-rose-300 border border-rose-500/50' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">
+                  ${m.emro_status === 'INACTIVE' ? '🔴 INACTIVE' : '🟢 ACTIVE'}
+                </span>
+              </div>
+              <div class="text-[11px] text-slate-400">${m.description} (${m.engine})</div>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">${m.type}</span>
+          </div>
+        `).join('');
+      }
+      dd.classList.remove('hidden');
+    }
+
+    function addSingleFromSearch(gse) {
+      const cycle = document.getElementById('cycleInput').value.trim().toUpperCase() || 'PM';
+      addToQueue(gse, cycle, 'SCHED');
+      document.getElementById('quickSearchInput').value = '';
+      document.getElementById('searchDropdown').classList.add('hidden');
+      renderQueue();
+    }
+
+    function addToQueue(gse, description, priority = 'SCHED') {
+      // Find info from master list
+      const info = allMasterList.find(m => m.gse.toUpperCase() === gse.toUpperCase()) || {};
+      queueItems.push({
+        gse: gse.toUpperCase(),
+        description: description,
+        priority: priority,
+        type: info.type || '-',
+        engine: info.engine || '-',
+        emro_status: info.emro_status || 'ACTIVE'
+      });
+    }
+
+    function removeQueueItem(index) {
+      queueItems.splice(index, 1);
+      renderQueue();
+    }
+
+    function clearQueue() {
+      queueItems = [];
+      renderQueue();
+    }
+
+    // Queue View Mode Switcher
+    function setQueueViewMode(mode) {
+      queueViewMode = mode;
+      const cardContainer = document.getElementById('queueCardsView');
+      const tableWrapper = document.getElementById('queueTableWrapper');
+      const btnCard = document.getElementById('btnQueueViewCard');
+      const btnTable = document.getElementById('btnQueueViewTable');
+
+      if (mode === 'card') {
+        if (cardContainer) cardContainer.classList.remove('hidden');
+        if (tableWrapper) tableWrapper.classList.add('hidden');
+        if (btnCard) btnCard.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition bg-rose-600 text-white shadow-sm";
+        if (btnTable) btnTable.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition text-slate-400 hover:text-white";
+      } else {
+        if (cardContainer) cardContainer.classList.add('hidden');
+        if (tableWrapper) tableWrapper.classList.remove('hidden');
+        if (btnTable) btnTable.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition bg-rose-600 text-white shadow-sm";
+        if (btnCard) btnCard.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition text-slate-400 hover:text-white";
+      }
+    }
+
+    function renderQueue() {
+      const tbody = document.getElementById('queueTableBody');
+      const cardsView = document.getElementById('queueCardsView');
+      const badge = document.getElementById('queueBadge');
+      const countInfo = document.getElementById('queueItemsCountInfo');
+      const startBtn = document.getElementById('startBatchBtn');
+
+      badge.innerText = `${queueItems.length} รายการ`;
+      if (countInfo) countInfo.innerText = `ในคิว ${queueItems.length} รายการ`;
+      startBtn.disabled = queueItems.length === 0;
+
+      if (queueItems.length === 0) {
+        if (tbody) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="5" class="p-8 text-center text-slate-500 font-sans">
+                ยังไม่มีรายการในคิว กรุณาวางรหัสอุปกรณ์จาก Excel หรือค้นหาด้านซ้าย
+              </td>
+            </tr>
+          `;
+        }
+        if (cardsView) {
+          cardsView.innerHTML = `
+            <div class="p-8 text-center text-slate-500 font-sans bg-slate-950/40 rounded-xl border border-dashed border-slate-800 text-xs">
+              ยังไม่มีรายการในคิว กรุณาวางรหัสอุปกรณ์จาก Excel หรือค้นหาด้านซ้าย
+            </div>
+          `;
+        }
+        return;
+      }
+
+      // 1. Table View
+      if (tbody) {
+        tbody.innerHTML = queueItems.map((item, idx) => {
+          const isInactive = item.emro_status === 'INACTIVE';
+          const rowClass = isInactive
+            ? 'hover:bg-rose-900/30 bg-rose-950/30 border-l-4 border-l-rose-500 text-rose-200'
+            : 'hover:bg-slate-800/40';
+
+          return `
+            <tr class="${rowClass}">
+              <td class="p-3 text-slate-500 whitespace-nowrap font-mono">${idx + 1}</td>
+              <td class="p-3 font-bold ${isInactive ? 'text-rose-400' : 'text-rose-400'} whitespace-nowrap flex items-center gap-2 font-mono">
+                ${item.gse}
+                ${isInactive ? '<span class="text-[10px] px-1.5 py-0.2 rounded font-bold bg-rose-600/40 text-rose-200 border border-rose-500/60 animate-pulse">🔴 INACTIVE</span>' : ''}
+              </td>
+              <td class="p-3 whitespace-nowrap font-sans">
+                <span class="px-1.5 py-0.5 rounded text-[11px] ${item.engine && item.engine.includes('NON') ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'}">
+                  ${item.type} • ${item.engine}
+                </span>
+              </td>
+              <td class="p-3 text-slate-200 whitespace-nowrap font-mono">${item.description}</td>
+              <td class="p-3 text-center whitespace-nowrap">
+                <button onclick="removeQueueItem(${idx})" class="text-slate-500 hover:text-rose-400 transition p-1">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // 2. Mobile Friendly Cards View
+      if (cardsView) {
+        cardsView.innerHTML = queueItems.map((item, idx) => {
+          const isInactive = item.emro_status === 'INACTIVE';
+          const cardBorder = isInactive
+            ? 'border-rose-500/50 bg-rose-950/30'
+            : 'border-slate-800 bg-slate-950/60 hover:border-slate-700';
+          const engineBadge = item.engine && item.engine.includes('NON')
+            ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+            : 'bg-sky-500/20 text-sky-300 border-sky-500/30';
+
+          return `
+          <div class="rounded-xl border ${cardBorder} p-3 flex items-center justify-between gap-3 shadow-sm transition">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-mono font-bold text-slate-500">#${idx + 1}</span>
+                <span class="font-mono font-bold text-sm text-white">${item.gse}</span>
+                ${isInactive ? '<span class="text-[10px] px-1.5 py-0.2 rounded font-bold bg-rose-600/40 text-rose-200 border border-rose-500/60 animate-pulse">🔴 INACTIVE</span>' : ''}
+              </div>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">${item.type}</span>
+                <span class="px-1.5 py-0.5 rounded border text-[10px] ${engineBadge}">${item.engine}</span>
+                <span class="text-slate-300 font-mono bg-slate-800/80 px-2 py-0.5 rounded">📝 ${item.description}</span>
+              </div>
+            </div>
+            <button onclick="removeQueueItem(${idx})" class="p-2.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 transition flex-shrink-0" title="ลบรายการนี้">
+              <i class="fa-solid fa-trash-can text-sm"></i>
+            </button>
+          </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // Start Batch Creation
+    async function startBatchCreation() {
+      if (queueItems.length === 0) return;
+
+      if (!isEmroConnected) {
+        alert('⚠️ บัญชีของคุณยังไม่ได้เชื่อมต่อกับระบบ eMRO (ไม่มีรหัสผ่าน/2FA)\nจึงไม่สามารถเปิดใบงานในนามของคุณได้\nกรุณาติดต่อผู้ดูแลระบบเพื่อลงทะเบียนรหัสผ่าน eMRO และ 2FA Key ครับ');
+        return;
+      }
+
+      const btn = document.getElementById('startBatchBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> กำลังส่งงาน...`;
+
+      try {
+        const res = await fetch('/api/start-batch', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ items: queueItems })
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('progressSection').classList.remove('hidden');
+          // Clear queue since it's now being processed
+          queueItems = [];
+          renderQueue();
+        } else {
+          alert('Error: ' + data.message);
+          btn.disabled = false;
+          btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> เริ่มเปิดใบงานทั้งหมด (Start Batch Creation)`;
+        }
+      } catch (e) {
+        alert('Network Error: ' + e);
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> เริ่มเปิดใบงานทั้งหมด (Start Batch Creation)`;
+      }
+    }
+
+    // Polling Batch Status
+    async function checkBatchStatus() {
+      try {
+        const res = await fetch('/api/batch-status');
+        const state = await res.json();
+
+        const badge = document.getElementById('statusBadge');
+        if (state.is_running) {
+          badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span><span class="text-rose-400 font-mono">Running (${state.current_index}/${state.total})</span>`;
+          document.getElementById('progressSection').classList.remove('hidden');
+
+          const pct = Math.round((state.current_index / (state.total || 1)) * 100);
+          document.getElementById('progressBar').style.width = `${pct}%`;
+          document.getElementById('progressPercent').innerText = `${pct}%`;
+          document.getElementById('progressTitle').innerText = `กำลังทำรายการที่ ${state.current_index}/${state.total}: ${state.current_gse}`;
+
+          // Refresh live screen capture
+          const liveImg = document.getElementById('liveScreenImg');
+          if (liveImg) {
+            liveImg.src = '/api/live-screenshot?t=' + Date.now();
+          }
+        } else {
+          badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span class="text-slate-300 font-mono">Ready</span>`;
+        }
+
+        // Update logs
+        if (state.logs && state.logs.length > 0) {
+          const consoleEl = document.getElementById('logConsole');
+          consoleEl.innerHTML = state.logs.map(l => `<div>${escapeHtml(l)}</div>`).join('');
+          consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        // Update completed results
+        if (state.results && state.results.length > 0) {
+          completedResults = state.results;
+          renderResultsTable(completedResults);
+        }
+
+      } catch (e) {
+        console.error("Status check failed:", e);
+      }
+    }
+
+    // Results View Mode Switcher
+    function setResultsViewMode(mode) {
+      resultsViewMode = mode;
+      const cardContainer = document.getElementById('resultsCardsView');
+      const tableWrapper = document.getElementById('resultsTableWrapper');
+      const btnCard = document.getElementById('btnResultsViewCard');
+      const btnTable = document.getElementById('btnResultsViewTable');
+
+      if (mode === 'card') {
+        if (cardContainer) cardContainer.classList.remove('hidden');
+        if (tableWrapper) tableWrapper.classList.add('hidden');
+        if (btnCard) btnCard.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition bg-emerald-600 text-white shadow-sm";
+        if (btnTable) btnTable.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition text-slate-400 hover:text-white";
+      } else {
+        if (cardContainer) cardContainer.classList.add('hidden');
+        if (tableWrapper) tableWrapper.classList.remove('hidden');
+        if (btnTable) btnTable.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition bg-emerald-600 text-white shadow-sm";
+        if (btnCard) btnCard.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition text-slate-400 hover:text-white";
+      }
+    }
+
+    // Render Results Table
+    function renderResultsTable(results) {
+      const badge = document.getElementById('resultsCountBadge');
+      const countInfo = document.getElementById('resultsCountInfo');
+      const tbody = document.getElementById('resultsTableBody');
+      const cardsView = document.getElementById('resultsCardsView');
+      const list = results || [];
+
+      // Check failed items for retry button
+      const failedItems = list.filter(r => !r.success);
+      const retryBtn = document.getElementById('retryFailedBtn');
+      const failedBadge = document.getElementById('failedCountBadge');
+      if (retryBtn) {
+        if (failedItems.length > 0) {
+          retryBtn.classList.remove('hidden');
+          if (failedBadge) failedBadge.innerText = failedItems.length;
+        } else {
+          retryBtn.classList.add('hidden');
+        }
+      }
+
+      if (badge) badge.innerText = list.length;
+      if (countInfo) countInfo.innerText = `ผลลัพธ์ทั้งหมด ${list.length} รายการ`;
+
+      if (!list || list.length === 0) {
+        if (tbody) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="8" class="p-8 text-center text-slate-500 font-sans">
+                ยังไม่มีผลลัพธ์ในเซสชั่นนี้ เริ่มเปิดใบงานในแท็บ Batch หรือ Ad-Hoc
+              </td>
+            </tr>
+          `;
+        }
+        if (cardsView) {
+          cardsView.innerHTML = `
+            <div class="col-span-full p-8 text-center text-slate-500 font-sans bg-slate-950/40 rounded-xl border border-dashed border-slate-800 text-xs">
+              ยังไม่มีผลลัพธ์ในเซสชั่นนี้ เริ่มเปิดใบงานในแท็บ Batch หรือ Ad-Hoc
+            </div>
+          `;
+        }
+        return;
+      }
+
+      // 1. Table View
+      if (tbody) {
+        tbody.innerHTML = list.map((r, idx) => `
+          <tr class="hover:bg-slate-800/40">
+            <td class="p-3 text-slate-500 whitespace-nowrap font-mono">${idx + 1}</td>
+            <td class="p-3 font-bold text-emerald-400 text-sm whitespace-nowrap font-mono">${r.wo_number || '-'}</td>
+            <td class="p-3 font-semibold text-white whitespace-nowrap font-mono">${r.gse}</td>
+            <td class="p-3 text-slate-300 whitespace-nowrap font-mono">${r.sn || '-'}</td>
+            <td class="p-3 whitespace-nowrap font-sans"><span class="px-1.5 py-0.5 rounded text-[11px] bg-slate-800 text-slate-300">${r.priority}</span></td>
+            <td class="p-3 text-slate-200 whitespace-nowrap font-mono">${r.description}</td>
+            <td class="p-3 whitespace-nowrap font-sans">
+              <span class="px-2 py-0.5 rounded text-xs font-semibold ${r.success ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}">
+                ${r.success ? 'SUCCESS' : 'FAILED'}
+              </span>
+            </td>
+            <td class="p-3 text-center whitespace-nowrap">
+              <button onclick="copyText('${r.wo_number}')" class="text-slate-400 hover:text-emerald-400 p-1">
+                <i class="fa-regular fa-copy"></i>
+              </button>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      // 2. Mobile Friendly Cards View
+      if (cardsView) {
+        cardsView.innerHTML = list.map((r, idx) => `
+          <div class="rounded-xl border ${r.success ? 'border-emerald-500/40 bg-emerald-950/20 shadow-emerald-950/20' : 'border-rose-500/40 bg-rose-950/20'} p-3.5 flex flex-col justify-between gap-3 shadow-sm">
+            <div>
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <div class="text-[11px] text-slate-400 font-mono">W/O #${idx + 1}</div>
+                  <div class="text-base sm:text-lg font-mono font-bold ${r.success ? 'text-emerald-400' : 'text-rose-400'} flex items-center gap-1.5 mt-0.5">
+                    ${r.wo_number || '-'}
+                  </div>
+                </div>
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold border ${r.success ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'} font-sans">
+                  ${r.success ? '✓ SUCCESS' : '✕ FAILED'}
+                </span>
+              </div>
+              <div class="mt-2.5 pt-2 border-t border-slate-800/80 space-y-1 text-xs font-mono">
+                <div class="flex items-center justify-between"><span class="text-slate-400 font-sans">GSE:</span> <span class="text-white font-bold">${r.gse}</span></div>
+                <div class="flex items-center justify-between"><span class="text-slate-400 font-sans">S/N:</span> <span class="text-slate-300">${r.sn || '-'}</span></div>
+                <div class="flex items-center justify-between"><span class="text-slate-400 font-sans">Priority:</span> <span class="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 text-[10px]">${r.priority}</span></div>
+                <div class="flex items-center justify-between"><span class="text-slate-400 font-sans">Desc:</span> <span class="text-slate-200">${r.description}</span></div>
+              </div>
+            </div>
+            ${r.wo_number ? `
+            <button onclick="copyText('${r.wo_number}')" class="w-full py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 hover:border-transparent transition text-xs font-semibold flex items-center justify-center gap-1.5">
+              <i class="fa-regular fa-copy"></i> คัดลอกเลข W/O
+            </button>
+            ` : ''}
+          </div>
+        `).join('');
+      }
+    }
+
+    // Retry Failed Items
+    function retryFailedItems() {
+      const failedItems = completedResults.filter(r => !r.success);
+      if (failedItems.length === 0) {
+        alert('ไม่มีรายการที่ล้มเหลวให้ลองใหม่');
+        return;
+      }
+
+      let count = 0;
+      failedItems.forEach(item => {
+        addToQueue(item.gse, item.description || 'PM', item.priority || 'SCHED');
+        count++;
+      });
+      renderQueue();
+      switchTab('batch');
+      alert(`นำรายการที่ไม่สำเร็จจำนวน ${count} รายการกลับเข้าสู่คิวเปิดใบงานเรียบร้อยแล้ว!\nสามารถตรวจสอบในแท็บ 'เปิดใบงานแบบกลุ่ม (Batch W/O)' แล้วกดเริ่มเปิดใบงานได้ทันที`);
+    }
+
+    // Copy All W/O Numbers
+    function copyAllWoNumbers() {
+      const numbers = completedResults
+        .filter(r => r.success && r.wo_number)
+        .map(r => r.wo_number)
+        .join('\n');
+
+      if (!numbers) {
+        alert('ไม่มีเลขใบงานให้คัดลอก');
+        return;
+      }
+      copyText(numbers);
+      alert(`คัดลอกเลขใบงานสำเร็จ ${completedResults.filter(r => r.success).length} รายการ (นำไปกด Paste ใน Excel หรือ Sheets ได้ทันที)`);
+    }
+
+    // Sync to Sheets Now
+    async function syncToSheetsNow() {
+      if (completedResults.length === 0) {
+        alert('ไม่มีรายการใบงานให้ส่ง');
+        return;
+      }
+      try {
+        const res = await fetch('/api/sync-sheets', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ items: completedResults })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('ส่งข้อมูลเข้า Google Sheets สำเร็จเรียบร้อย!');
+        } else {
+          alert('Sync Failed: ' + data.message);
+        }
+      } catch (e) {
+        alert('Sync Error: ' + e);
+      }
+    }
+
+    // Single Ad-Hoc W/O Submit
+    function setAdhocDesc(desc) {
+      document.getElementById('adhocDesc').value = desc;
+    }
+
+    // Autocomplete & Live Search for Ad-Hoc GSE Input
+    let adhocActiveIndex = -1;
+    let currentAdhocMatches = [];
+
+    function onAdhocGseInput(val) {
+      const box = document.getElementById('adhocGseSuggestions');
+      const clearBtn = document.getElementById('adhocClearGseBtn');
+      const matchCountBadge = document.getElementById('adhocGseMatchCount');
+      const query = (val || '').trim().toUpperCase();
+
+      if (clearBtn) {
+        clearBtn.classList.toggle('hidden', query.length === 0);
+      }
+
+      if (!allMasterList || allMasterList.length === 0) {
+        fetchMasterList().then(() => onAdhocGseInput(val));
+        return;
+      }
+
+      if (!query) {
+        currentAdhocMatches = allMasterList.slice(0, 12);
+      } else {
+        const exactMatches = [];
+        const startsWithMatches = [];
+        const containsMatches = [];
+
+        for (const item of allMasterList) {
+          const gse = (item.gse || '').toUpperCase();
+          const sn = (item.sn || '').toUpperCase();
+          const desc = (item.description || '').toUpperCase();
+          const type = (item.type || '').toUpperCase();
+
+          if (gse === query) {
+            exactMatches.push(item);
+          } else if (gse.startsWith(query) || sn.startsWith(query)) {
+            startsWithMatches.push(item);
+          } else if (gse.includes(query) || sn.includes(query) || desc.includes(query) || type.includes(query)) {
+            containsMatches.push(item);
+          }
+        }
+
+        currentAdhocMatches = [...exactMatches, ...startsWithMatches, ...containsMatches].slice(0, 20);
+      }
+
+      adhocActiveIndex = -1;
+
+      if (currentAdhocMatches.length === 0) {
+        box.innerHTML = `<div class="p-3 text-center text-xs text-slate-400">ไม่พบรหัสอุปกรณ์ที่ตรงกับ "${escapeHtml(query)}"</div>`;
+        box.classList.remove('hidden');
+        if (matchCountBadge) matchCountBadge.classList.add('hidden');
+        return;
+      }
+
+      if (matchCountBadge) {
+        matchCountBadge.innerText = `พบ ${currentAdhocMatches.length} รายการ`;
+        matchCountBadge.classList.remove('hidden');
+      }
+
+      let html = '';
+      currentAdhocMatches.forEach((item, idx) => {
+        const isMotor = (item.engine || '').toUpperCase().includes('MOTOR');
+        const badgeColor = isMotor ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-sky-500/20 text-sky-300 border-sky-500/40';
+        const snText = (item.sn && item.sn !== '-') ? `S/N: ${item.sn}` : '';
+        const descText = item.description || item.type || '';
+
+        html += `
+          <div id="adhocItem-${idx}" onclick="selectAdhocGse('${escapeHtml(item.gse)}', ${idx})"
+               class="adhoc-sugg-item p-2.5 sm:px-3.5 hover:bg-amber-600/20 cursor-pointer flex items-center justify-between gap-3 transition">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="font-mono font-bold text-amber-400 text-sm tracking-wide">${highlightMatch(item.gse, query)}</span>
+                ${snText ? `<span class="text-[11px] font-mono text-slate-400 px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700">${highlightMatch(snText, query)}</span>` : ''}
+              </div>
+              <div class="text-xs text-slate-300 truncate mt-0.5">${highlightMatch(descText, query)}</div>
+            </div>
+            <div class="flex-shrink-0 text-right">
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badgeColor}">${item.engine || 'GSE'}</span>
+              <div class="text-[10px] text-slate-400 mt-0.5">${item.station || 'DMK'}</div>
+            </div>
+          </div>
+        `;
+      });
+
+      box.innerHTML = html;
+      box.classList.remove('hidden');
+    }
+
+    function highlightMatch(text, query) {
+      if (!query || !text) return escapeHtml(text || '');
+      const escaped = escapeHtml(text);
+      const qEsc = escapeRegex(query);
+      const regex = new RegExp(`(${qEsc})`, 'gi');
+      return escaped.replace(regex, '<span class="text-amber-200 underline font-semibold bg-amber-500/30 px-0.5 rounded">$1</span>');
+    }
+
+    function escapeRegex(string) {
+      return string.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
+    }
+
+    function selectAdhocGse(gse, index) {
+      const input = document.getElementById('adhocGse');
+      const box = document.getElementById('adhocGseSuggestions');
+      const infoCard = document.getElementById('adhocGseInfo');
+      const infoText = document.getElementById('adhocGseInfoText');
+      const infoBadge = document.getElementById('adhocGseInfoBadge');
+      const clearBtn = document.getElementById('adhocClearGseBtn');
+      const matchCountBadge = document.getElementById('adhocGseMatchCount');
+
+      input.value = gse;
+      box.classList.add('hidden');
+      if (clearBtn) clearBtn.classList.remove('hidden');
+      if (matchCountBadge) matchCountBadge.classList.add('hidden');
+
+      let item = null;
+      if (index !== undefined && currentAdhocMatches[index]) {
+        item = currentAdhocMatches[index];
+      } else {
+        item = allMasterList.find(x => (x.gse || '').toUpperCase() === gse.toUpperCase());
+      }
+
+      if (item && infoCard) {
+        const isMotor = (item.engine || '').toUpperCase().includes('MOTOR');
+        infoText.innerHTML = `<strong>${escapeHtml(item.gse)}</strong> — ${escapeHtml(item.description || item.type || '')} ${(item.sn && item.sn !== '-') ? `(S/N: ${escapeHtml(item.sn)})` : ''}`;
+        infoBadge.innerText = item.engine || 'GSE';
+        infoBadge.className = isMotor 
+          ? 'px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40'
+          : 'px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/40';
+        infoCard.classList.remove('hidden');
+      } else if (infoCard) {
+        infoCard.classList.add('hidden');
+      }
+    }
+
+    function clearAdhocGse() {
+      const input = document.getElementById('adhocGse');
+      const box = document.getElementById('adhocGseSuggestions');
+      const infoCard = document.getElementById('adhocGseInfo');
+      const clearBtn = document.getElementById('adhocClearGseBtn');
+      const matchCountBadge = document.getElementById('adhocGseMatchCount');
+
+      if (input) input.value = '';
+      if (box) box.classList.add('hidden');
+      if (infoCard) infoCard.classList.add('hidden');
+      if (clearBtn) clearBtn.classList.add('hidden');
+      if (matchCountBadge) matchCountBadge.classList.add('hidden');
+      if (input) input.focus();
+    }
+
+    function onAdhocGseKeydown(e) {
+      const box = document.getElementById('adhocGseSuggestions');
+      if (box.classList.contains('hidden')) return;
+
+      const items = box.querySelectorAll('.adhoc-sugg-item');
+      if (items.length === 0) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        adhocActiveIndex = (adhocActiveIndex + 1) % items.length;
+        updateAdhocActiveItem(items);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        adhocActiveIndex = (adhocActiveIndex - 1 + items.length) % items.length;
+        updateAdhocActiveItem(items);
+      } else if (e.key === 'Enter') {
+        if (adhocActiveIndex >= 0 && currentAdhocMatches[adhocActiveIndex]) {
+          e.preventDefault();
+          selectAdhocGse(currentAdhocMatches[adhocActiveIndex].gse, adhocActiveIndex);
+        }
+      } else if (e.key === 'Escape') {
+        box.classList.add('hidden');
+      }
+    }
+
+    function updateAdhocActiveItem(items) {
+      items.forEach((el, idx) => {
+        if (idx === adhocActiveIndex) {
+          el.classList.add('bg-amber-600/30', 'border-l-4', 'border-amber-400');
+          el.scrollIntoView({ block: 'nearest' });
+        } else {
+          el.classList.remove('bg-amber-600/30', 'border-l-4', 'border-amber-400');
+        }
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      const input = document.getElementById('adhocGse');
+      const box = document.getElementById('adhocGseSuggestions');
+      if (input && box && !input.contains(e.target) && !box.contains(e.target)) {
+        box.classList.add('hidden');
+      }
+    });
+
+    async function submitAdhocWo() {
+      if (!isEmroConnected) {
+        alert('⚠️ บัญชีของคุณยังไม่ได้เชื่อมต่อกับระบบ eMRO (ไม่มีรหัสผ่าน/2FA)\nจึงไม่สามารถเปิดใบงานในนามของคุณได้\nกรุณาติดต่อผู้ดูแลระบบเพื่อลงทะเบียนรหัสผ่าน eMRO และ 2FA Key ครับ');
+        return;
+      }
+
+      const gse = document.getElementById('adhocGse').value.trim().toUpperCase();
+      const desc = document.getElementById('adhocDesc').value.trim().toUpperCase();
+
+      if (!gse) {
+        alert('กรุณากรอกรหัสอุปกรณ์ (GSE NO.)');
+        return;
+      }
+      if (!desc) {
+        alert('กรุณากรอกคำอธิบายอาการ (Description)');
+        return;
+      }
+
+      const btn = document.getElementById('adhocSubmitBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> กำลังเปิดใบงานความเร็วสูง...`;
+
+      const tStart = performance.now();
+      try {
+        const res = await fetch('/api/create-single', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ gse, description: desc, priority: 'UNSCHED' })
+        });
+        const result = await res.json();
+        const elapsedSec = ((performance.now() - tStart) / 1000).toFixed(1);
+
+        if (result.success) {
+          document.getElementById('adhocResultCard').classList.remove('hidden');
+          document.getElementById('adhocWoNumber').innerText = result.wo_number;
+          document.getElementById('adhocWoDetails').innerHTML = `GSE: ${result.gse} | S/N: ${result.sn || '-'} | Priority: UNSCHED <span class="ml-2 text-emerald-400 font-semibold">(ใช้เวลาเพียง ${elapsedSec}s ⚡)</span>`;
+          completedResults.push(result);
+          renderResultsTable(completedResults);
+          fetchHistoryLogs();
+        } else {
+          alert('Failed: ' + (result.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Error: ' + e);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> เปิดใบงานทันที (Create W/O Now)`;
+      }
+    }
+
+    // Master View Mode Switcher
+    function setMasterViewMode(mode) {
+      masterViewMode = mode;
+      const cardContainer = document.getElementById('masterCardsView');
+      const tableWrapper = document.getElementById('masterTableWrapper');
+      const btnCard = document.getElementById('btnViewCard');
+      const btnTable = document.getElementById('btnViewTable');
+
+      if (mode === 'card') {
+        if (cardContainer) cardContainer.classList.remove('hidden');
+        if (tableWrapper) tableWrapper.classList.add('hidden');
+        if (btnCard) {
+          btnCard.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition bg-sky-600 text-white shadow-sm";
+        }
+        if (btnTable) {
+          btnTable.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition text-slate-400 hover:text-white";
+        }
+      } else {
+        if (cardContainer) cardContainer.classList.add('hidden');
+        if (tableWrapper) tableWrapper.classList.remove('hidden');
+        if (btnTable) {
+          btnTable.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition bg-sky-600 text-white shadow-sm";
+        }
+        if (btnCard) {
+          btnCard.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition text-slate-400 hover:text-white";
+        }
+      }
+    }
+
+    // Master Table Rendering & Filtering
+    function renderMasterTable(list) {
+      const tbody = document.getElementById('masterTableBody');
+      const cardsView = document.getElementById('masterCardsView');
+      const countInfo = document.getElementById('masterItemsCountInfo');
+      const displayList = (list || []).slice(0, 1000);
+
+      if (countInfo) {
+        countInfo.innerText = `แสดง ${displayList.length.toLocaleString()} จาก ${allMasterList.length.toLocaleString()} รายการ`;
+      }
+
+      if (!displayList || displayList.length === 0) {
+        if (tbody) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="8" class="p-8 text-center text-slate-500 font-sans">
+                ไม่พบอุปกรณ์ที่ตรงกับเงื่อนไขค้นหา
+              </td>
+            </tr>
+          `;
+        }
+        if (cardsView) {
+          cardsView.innerHTML = `
+            <div class="col-span-full p-8 text-center text-slate-500 font-sans bg-slate-950/60 rounded-xl border border-dashed border-slate-800">
+              ไม่พบอุปกรณ์ที่ตรงกับเงื่อนไขค้นหา
+            </div>
+          `;
+        }
+        return;
+      }
+
+      // 1. Table View HTML
+      if (tbody) {
+        tbody.innerHTML = displayList.map(item => {
+          const isInactive = item.emro_status === 'INACTIVE';
+          const rowClass = isInactive
+            ? 'hover:bg-rose-950/50 bg-rose-950/30 border-l-4 border-l-rose-500 text-rose-200'
+            : 'hover:bg-slate-800/40';
+          return `
+          <tr class="${rowClass}">
+            <td class="p-3 font-bold ${isInactive ? 'text-rose-300' : 'text-white'} whitespace-nowrap font-mono">${item.gse}</td>
+            <td class="p-3 text-slate-300 whitespace-nowrap">${item.type}</td>
+            <td class="p-3 whitespace-nowrap">
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-sans ${item.engine.includes('NON') ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'}">
+                ${item.engine}
+              </span>
+            </td>
+            <td class="p-3 whitespace-nowrap font-sans">
+              <span class="px-2 py-0.5 rounded text-[11px] font-semibold ${isInactive ? 'bg-rose-600/40 text-rose-200 border border-rose-500/60 font-bold animate-pulse' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">
+                ${isInactive ? '🔴 INACTIVE' : '🟢 ACTIVE'}
+              </span>
+            </td>
+            <td class="p-3 text-slate-400 font-mono whitespace-nowrap">${item.sn || '-'}</td>
+            <td class="p-3 text-slate-300 whitespace-nowrap">${item.brand || ''} ${item.model || ''}</td>
+            <td class="p-3 text-slate-400 font-mono whitespace-nowrap">${item.station || '-'}</td>
+            <td class="p-3 text-center whitespace-nowrap font-sans">
+              <button onclick="addSingleFromMaster('${item.gse}')" class="px-2.5 py-1 rounded bg-rose-600/30 hover:bg-rose-600 text-rose-300 hover:text-white transition text-xs font-semibold">
+                + เปิด PM
+              </button>
+            </td>
+          </tr>
+        `;
+        }).join('');
+      }
+
+      // 2. Mobile Friendly Cards View HTML
+      if (cardsView) {
+        cardsView.innerHTML = displayList.map(item => {
+          const isInactive = item.emro_status === 'INACTIVE';
+          const cardBorder = isInactive
+            ? 'border-rose-500/40 bg-rose-950/20 shadow-rose-950/30'
+            : 'border-slate-800 bg-slate-900/70 hover:border-slate-700';
+          const badgeClass = isInactive
+            ? 'bg-rose-600/30 text-rose-300 border-rose-500/50 font-bold animate-pulse'
+            : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 font-semibold';
+          const engineBadge = item.engine && item.engine.includes('NON')
+            ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+            : 'bg-sky-500/20 text-sky-300 border-sky-500/30';
+
+          return `
+          <div class="rounded-xl border ${cardBorder} p-3.5 flex flex-col justify-between gap-3 shadow-sm transition">
+            <div>
+              <div class="flex items-start justify-between gap-2">
+                <div class="font-mono font-bold text-sm sm:text-base text-white tracking-wide flex items-center gap-1.5">
+                  <i class="fa-solid fa-truck-ramp-box text-rose-400 text-xs"></i>
+                  ${item.gse}
+                </div>
+                <span class="px-2 py-0.5 rounded text-[10px] sm:text-[11px] border ${badgeClass} whitespace-nowrap font-sans">
+                  ${isInactive ? '🔴 INACTIVE' : '🟢 ACTIVE'}
+                </span>
+              </div>
+              <div class="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">${item.type}</span>
+                <span class="px-1.5 py-0.5 rounded border text-[11px] ${engineBadge}">${item.engine}</span>
+                <span class="text-slate-400 font-mono text-[11px]">📍 ${item.station || 'DMK'}</span>
+              </div>
+              <div class="mt-2.5 text-xs text-slate-400 space-y-1 border-t border-slate-800/80 pt-2 font-mono">
+                <div class="flex items-center justify-between"><span class="text-slate-500">S/N:</span> <span class="text-slate-300 font-bold">${item.sn || '-'}</span></div>
+                <div class="flex items-center justify-between truncate"><span class="text-slate-500">Brand / Model:</span> <span class="text-slate-300 font-sans truncate">${item.brand || ''} ${item.model || ''}</span></div>
+              </div>
+            </div>
+            <button onclick="addSingleFromMaster('${item.gse}')" class="w-full py-2 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 hover:border-transparent transition text-xs font-semibold flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-plus"></i> เพิ่มเข้าคิวเปิด PM
+            </button>
+          </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function addSingleFromMaster(gse) {
+      const cycle = document.getElementById('cycleInput').value.trim().toUpperCase() || 'PM';
+      addToQueue(gse, cycle, 'SCHED');
+      renderQueue();
+      switchTab('batch');
+    }
+
+    function filterMasterTable(q) {
+      const query = (q || '').trim().toLowerCase();
+      let filtered = allMasterList;
+      if (activeStatusFilter) {
+        filtered = filtered.filter(item => item.emro_status === activeStatusFilter);
+      }
+      if (activeCategoryFilter) {
+        filtered = filtered.filter(item => 
+          item.gse.startsWith(`TLM-${activeCategoryFilter}`) || 
+          item.gse.includes(`-${activeCategoryFilter}-`) ||
+          (item.type && item.type.toUpperCase() === activeCategoryFilter.toUpperCase())
+        );
+      }
+      if (query) {
+        filtered = filtered.filter(item => 
+          item.gse.toLowerCase().includes(query) ||
+          item.type.toLowerCase().includes(query) ||
+          item.description.toLowerCase().includes(query) ||
+          item.sn.toLowerCase().includes(query) ||
+          (item.emro_status && item.emro_status.toLowerCase().includes(query)) ||
+          (item.brand && item.brand.toLowerCase().includes(query))
+        );
+      }
+      renderMasterTable(filtered);
+    }
+
+    function filterByEmroStatus(status) {
+      activeStatusFilter = status;
+      document.querySelectorAll('.status-pill').forEach(btn => {
+        if ((!status && btn.innerText === 'ทั้งหมด') || (status && btn.innerText.includes(status))) {
+          btn.className = "status-pill px-2.5 py-1 rounded-lg bg-sky-600 text-white font-medium";
+        } else {
+          btn.className = "status-pill px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700";
+        }
+      });
+      filterMasterTable(document.getElementById('masterSearchInput').value);
+    }
+
+    function filterMasterByCategory(cat) {
+      activeCategoryFilter = cat;
+      document.querySelectorAll('.cat-pill').forEach(btn => {
+        if ((!cat && btn.innerText === 'ทั้งหมด') || btn.innerText.startsWith(cat)) {
+          btn.className = "cat-pill px-2.5 py-1 rounded-lg bg-sky-600 text-white font-medium";
+        } else {
+          btn.className = "cat-pill px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700";
+        }
+      });
+      filterMasterTable(document.getElementById('masterSearchInput').value);
+    }
+
+    // ==================== HISTORY LOGS ====================
+    let allHistoryItems = [];
+    let currentHistoryFilter = '';
+    let currentHistoryQuery = '';
+    let historyViewMode = (window.innerWidth < 768) ? 'card' : 'table';
+
+    async function fetchHistoryLogs() {
+      const refreshIcon = document.getElementById('histRefreshIcon');
+      if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
+      try {
+        let url = '/api/history';
+        const params = new URLSearchParams();
+        if (currentHistoryFilter) params.append('type', currentHistoryFilter);
+        if (currentHistoryQuery) params.append('q', currentHistoryQuery);
+        const qStr = params.toString();
+        if (qStr) url += '?' + qStr;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        // Update badges & stat cards
+        const totalBadge = document.getElementById('historyTotalBadge');
+        if (totalBadge) totalBadge.innerText = data.total || 0;
+
+        const histTotalEl = document.getElementById('histTotalCount');
+        if (histTotalEl) histTotalEl.innerText = (data.total || 0).toLocaleString();
+
+        const histPmEl = document.getElementById('histPmCount');
+        if (histPmEl) histPmEl.innerText = (data.pm_count || 0).toLocaleString();
+
+        const histCmEl = document.getElementById('histCmCount');
+        if (histCmEl) histCmEl.innerText = (data.cm_count || 0).toLocaleString();
+
+        const pillAll = document.getElementById('histPillAllCount');
+        if (pillAll) pillAll.innerText = data.total || 0;
+        const pillPm = document.getElementById('histPillPmCount');
+        if (pillPm) pillPm.innerText = data.pm_count || 0;
+        const pillCm = document.getElementById('histPillCmCount');
+        if (pillCm) pillCm.innerText = data.cm_count || 0;
+
+        const label = document.getElementById('histResultCountLabel');
+        if (label) {
+          label.innerText = `แสดงผลลัพธ์ ${data.filtered_count || 0} จากประวัติทั้งหมด ${data.total || 0} รายการ`;
+        }
+
+        allHistoryItems = data.items || [];
+        renderHistoryTable(allHistoryItems);
+        renderHistoryCards(allHistoryItems);
+
+      } catch (err) {
+        console.error("Failed to fetch history logs:", err);
+        const tbody = document.getElementById('historyTableBody');
+        if (tbody) {
+          tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-rose-400 font-sans">เกิดข้อผิดพลาดในการโหลดประวัติ: ${err}</td></tr>`;
+        }
+      } finally {
+        if (refreshIcon) setTimeout(() => refreshIcon.classList.remove('fa-spin'), 400);
+      }
+    }
+
+    function renderHistoryTable(items) {
+      const tbody = document.getElementById('historyTableBody');
+      if (!tbody) return;
+
+      if (!items || items.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" class="p-8 text-center text-slate-500 font-sans">
+              ไม่พบประวัติใบงานที่ตรงกับเงื่อนไขการค้นหา
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = items.map((r, idx) => {
+        const prio = (r.priority || 'SCHED').toUpperCase();
+        const isPm = prio === 'SCHED' || prio === 'PM';
+        const typeBadge = isPm 
+          ? `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">PM</span>`
+          : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">CM</span>`;
+
+        const woNum = r.wo_number || '-';
+        const user = r.user || 'TL248005';
+        const dateStr = r.created_at || r.date || '-';
+        const desc = r.description || '-';
+        const gse = r.gse || '-';
+        const sn = r.sn || '-';
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="p-2.5 text-center text-slate-500 text-xs">${idx + 1}</td>
+            <td class="p-2.5 text-center text-slate-400 text-xs whitespace-nowrap">${escapeHtml(dateStr)}</td>
+            <td class="p-2.5 text-center">${typeBadge}</td>
+            <td class="p-2.5 font-bold text-white text-xs">
+              <span class="cursor-pointer hover:text-emerald-400 transition" onclick="copyText('${woNum}')" title="คลิกเพื่อคัดลอก">
+                ${escapeHtml(woNum)} <i class="fa-regular fa-copy text-[10px] text-slate-500 hover:text-white ml-0.5"></i>
+              </span>
+            </td>
+            <td class="p-2.5 font-bold text-sky-400 text-xs">${escapeHtml(gse)}</td>
+            <td class="p-2.5 text-slate-300 text-xs">${escapeHtml(sn)}</td>
+            <td class="p-2.5 text-slate-300 text-xs font-sans">${escapeHtml(desc)}</td>
+            <td class="p-2.5 text-center text-slate-400 text-xs font-mono">${escapeHtml(user)}</td>
+            <td class="p-2.5 text-center">
+              <span class="inline-flex items-center gap-1 text-[11px] font-sans font-semibold text-emerald-400">
+                <i class="fa-solid fa-check text-[10px]"></i> สำเร็จ
+              </span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderHistoryCards(items) {
+      const container = document.getElementById('historyCardsView');
+      if (!container) return;
+
+      if (!items || items.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full p-8 text-center text-slate-500 font-sans bg-slate-950/40 rounded-xl border border-dashed border-slate-800 text-xs">
+            ไม่พบประวัติใบงานที่ตรงกับเงื่อนไขการค้นหา
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = items.map((r, idx) => {
+        const prio = (r.priority || 'SCHED').toUpperCase();
+        const isPm = prio === 'SCHED' || prio === 'PM';
+        const typeBadge = isPm 
+          ? `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">PM รอบเดือน</span>`
+          : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">CM แจ้งซ่อม</span>`;
+
+        const woNum = r.wo_number || '-';
+        const user = r.user || 'TL248005';
+        const dateStr = r.created_at || r.date || '-';
+        const desc = r.description || '-';
+        const gse = r.gse || '-';
+        const sn = r.sn || '-';
+
+        return `
+          <div class="bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl p-3.5 space-y-2.5 transition">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-mono text-slate-500">#${idx + 1}</span>
+                ${typeBadge}
+              </div>
+              <span class="text-[10px] font-mono text-slate-400">${escapeHtml(dateStr)}</span>
+            </div>
+            <div>
+              <div class="text-[11px] text-slate-400">เลขที่ใบงาน (W/O):</div>
+              <div class="text-base font-bold font-mono text-white flex items-center justify-between">
+                <span>${escapeHtml(woNum)}</span>
+                <button type="button" onclick="copyText('${woNum}')" class="text-xs text-slate-400 hover:text-white px-2 py-0.5 bg-slate-800 rounded transition">
+                  <i class="fa-regular fa-copy"></i>
+                </button>
+              </div>
+            </div>
+            <div class="text-xs border-t border-slate-800/80 pt-2 space-y-1">
+              <div class="flex justify-between">
+                <span class="text-slate-400">อุปกรณ์:</span>
+                <span class="font-bold font-mono text-sky-400">${escapeHtml(gse)} (S/N: ${escapeHtml(sn)})</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">อาการ/งาน:</span>
+                <span class="text-slate-200 text-right truncate max-w-[170px]">${escapeHtml(desc)}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">ผู้เปิด:</span>
+                <span class="font-mono text-slate-300">${escapeHtml(user)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function filterHistoryType(type) {
+      currentHistoryFilter = type;
+      ['all', 'pm', 'cm'].forEach(t => {
+        const btn = document.getElementById(`histFilter-${t}`);
+        if (!btn) return;
+        const matches = (type === '' && t === 'all') || (type.toLowerCase() === t);
+        if (matches) {
+          btn.className = "hist-filter-pill px-3 py-1.5 rounded-lg bg-sky-600 text-white font-semibold transition";
+        } else {
+          btn.className = "hist-filter-pill px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold transition";
+        }
+      });
+      fetchHistoryLogs();
+    }
+
+    let searchHistoryDebounce = null;
+    function onSearchHistory(query) {
+      currentHistoryQuery = (query || '').trim();
+      clearTimeout(searchHistoryDebounce);
+      searchHistoryDebounce = setTimeout(() => {
+        fetchHistoryLogs();
+      }, 250);
+    }
+
+    function setHistoryViewMode(mode) {
+      historyViewMode = mode;
+      const cardContainer = document.getElementById('historyCardsView');
+      const tableWrapper = document.getElementById('historyTableWrapper');
+      const btnCard = document.getElementById('btnHistViewCard');
+      const btnTable = document.getElementById('btnHistViewTable');
+
+      if (mode === 'card') {
+        if (cardContainer) cardContainer.classList.remove('hidden');
+        if (tableWrapper) tableWrapper.classList.add('hidden');
+        if (btnCard) btnCard.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition bg-sky-600 text-white shadow-sm";
+        if (btnTable) btnTable.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition text-slate-400 hover:text-white";
+      } else {
+        if (cardContainer) cardContainer.classList.add('hidden');
+        if (tableWrapper) tableWrapper.classList.remove('hidden');
+        if (btnTable) btnTable.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition bg-sky-600 text-white shadow-sm";
+        if (btnCard) btnCard.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition text-slate-400 hover:text-white";
+      }
+    }
+
+    function copyHistoryWoNumbers() {
+      const numbers = allHistoryItems.map(r => r.wo_number).filter(Boolean);
+      if (numbers.length === 0) {
+        alert("ไม่มีเลข W/O ในรายการ");
+        return;
+      }
+      navigator.clipboard.writeText(numbers.join('\n')).then(() => {
+        alert(`คัดลอกเลข W/O ทั้งหมด ${numbers.length} รายการ เรียบร้อยแล้ว!`);
+      });
+    }
+
+    // Utilities
+    function copyText(text) {
+      navigator.clipboard.writeText(text);
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+  </script>
+</body>
+</html>

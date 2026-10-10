@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>eMRO Inventory Monitor Dashboard (DM01)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', 'Prompt', sans-serif; background-color: #F8FAFC; color: #1E293B; }
+    .badge-issued { background-color: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
+    .badge-receiving { background-color: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; }
+    .badge-transfer { background-color: #E0E7FF; color: #3730A3; border: 1px solid #C7D2FE; }
+    .badge-other { background-color: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; }
+    .card-shadow { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03); }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
+  </style>
+</head>
+<body class="min-h-screen pb-12 antialiased">
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-30 bg-white/85 backdrop-blur border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold shadow-sm shadow-indigo-200">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-base sm:text-lg font-bold text-slate-800">eMRO Inventory Monitor</h1>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>DM01
+            </span>
+          </div>
+          <p class="text-xs text-slate-400" id="syncStatus">กำลังเชื่อมต่อข้อมูล...</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <button onclick="fetchData()" id="refreshBtn" class="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 active:scale-95 transition rounded-lg border border-slate-200">
+          <svg id="refreshIcon" class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span class="hidden sm:inline">รีเฟรช</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
+
+    <!-- KPI Summary Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 card-shadow">
+        <div class="flex items-center justify-between text-slate-400 mb-1">
+          <span class="text-xs font-medium">รายการทั้งหมด</span>
+          <div class="p-1.5 rounded-lg bg-slate-100 text-slate-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
+        </div>
+        <div class="text-2xl font-bold text-slate-800" id="kpiTotal">0</div>
+        <div class="text-[11px] text-slate-400 mt-0.5">ในรอบ Polling ปัจจุบัน</div>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-amber-200/70 card-shadow">
+        <div class="flex items-center justify-between text-amber-600 mb-1">
+          <span class="text-xs font-medium">เบิกจ่าย (ISSUED)</span>
+          <div class="p-1.5 rounded-lg bg-amber-50 text-amber-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg></div>
+        </div>
+        <div class="text-2xl font-bold text-amber-700" id="kpiIssued">0</div>
+        <div class="text-[11px] text-amber-600/70 mt-0.5">ตัดยอดจากสต็อก</div>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-emerald-200/70 card-shadow">
+        <div class="flex items-center justify-between text-emerald-600 mb-1">
+          <span class="text-xs font-medium">รับเข้า (RECEIVING)</span>
+          <div class="p-1.5 rounded-lg bg-emerald-50 text-emerald-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16l-4-4m0 0l4-4m-4 4h14m-6 4v1a3 3 0 003 3h4a3 3 0 003-3V7a3 3 0 00-3-3h-4a3 3 0 00-3 3v1"/></svg></div>
+        </div>
+        <div class="text-2xl font-bold text-emerald-700" id="kpiReceiving">0</div>
+        <div class="text-[11px] text-emerald-600/70 mt-0.5">รับเข้าจาก PO / Initial</div>
+      </div>
+
+      <div class="bg-white p-4 rounded-2xl border border-indigo-200/70 card-shadow">
+        <div class="flex items-center justify-between text-indigo-600 mb-1">
+          <span class="text-xs font-medium">ย้าย/คืน (TRANSFER/RTS)</span>
+          <div class="p-1.5 rounded-lg bg-indigo-50 text-indigo-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg></div>
+        </div>
+        <div class="text-2xl font-bold text-indigo-700" id="kpiTransfer">0</div>
+        <div class="text-[11px] text-indigo-600/70 mt-0.5">เปลี่ยน Bin / คืน W/O</div>
+      </div>
+    </div>
+
+    <!-- Search & Filter Controls -->
+    <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 card-shadow space-y-3">
+      <div class="flex flex-col sm:flex-row gap-2 sm:items-center justify-between">
+        <div class="relative flex-1">
+          <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" id="searchInput" oninput="applyFilters()" placeholder="ค้นหา P/N, W/O, Batch, Bin, ผู้เบิก..." class="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition">
+        </div>
+
+        <!-- View Mode Buttons -->
+        <div class="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0">
+          <button onclick="setFilterType('ALL')" id="btnFilterALL" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-white transition whitespace-nowrap">ทั้งหมด</button>
+          <button onclick="setFilterType('ISSUED')" id="btnFilterISSUED" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition whitespace-nowrap">ISSUED</button>
+          <button onclick="setFilterType('RECEIVING')" id="btnFilterRECEIVING" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition whitespace-nowrap">RECEIVING</button>
+          <button onclick="setFilterType('TRANSFER')" id="btnFilterTRANSFER" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition whitespace-nowrap">TRANSFER</button>
+          <button onclick="setFilterType('RTS')" id="btnFilterRTS" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition whitespace-nowrap">RTS/WO</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile View: Card List (Visible on Phone) -->
+    <div class="block md:hidden space-y-3" id="mobileCardContainer">
+      <div class="text-center py-12 text-slate-400 text-sm">กำลังโหลดข้อมูล...</div>
+    </div>
+
+    <!-- Desktop View: Interactive Table (Visible on Tablets & PC) -->
+    <div class="hidden md:block bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+      <div class="overflow-x-auto max-h-[700px]">
+        <table class="w-full text-left text-xs">
+          <thead class="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
+            <tr>
+              <th class="px-3.5 py-3">Type</th>
+              <th class="px-3.5 py-3">P/N</th>
+              <th class="px-3.5 py-3">QTY</th>
+              <th class="px-3.5 py-3">Bin</th>
+              <th class="px-3.5 py-3">Batch</th>
+              <th class="px-3.5 py-3">W/O - S/O</th>
+              <th class="px-3.5 py-3">Issued To</th>
+              <th class="px-3.5 py-3">Date / By</th>
+              <th class="px-3.5 py-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody id="desktopTableBody" class="divide-y divide-slate-100">
+            <tr><td colspan="9" class="text-center py-12 text-slate-400">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Detail Modal Popup -->
+  <div id="detailModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl border border-slate-200 max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div>
+          <h3 class="text-base font-bold text-slate-800" id="modalTitle">รายละเอียด Transaction</h3>
+          <p class="text-xs text-slate-400" id="modalSubtitle">-</p>
+        </div>
+        <button onclick="closeModal()" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto space-y-4 text-xs" id="modalBody">
+        <!-- Injected dynamically -->
+      </div>
+      <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 text-right">
+        <button onclick="closeModal()" class="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition">ปิดหน้าต่าง</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbz6-inmtXs-754wTYWgl5hp3C609mu2fxWsFWZLUTHgrTtE447IEysvEaG0HzB_qXNw/exec";
+    var rawData = [];
+    var headers = [];
+    var currentFilterType = "ALL";
+    var isFetching = false;
+
+    function getBadgeClass(type) {
+      var t = (type || "").toUpperCase();
+      if (t.indexOf("ISSUED") !== -1) return "badge-issued";
+      if (t.indexOf("RECEIVING") !== -1) return "badge-receiving";
+      if (t.indexOf("TRANSFER") !== -1) return "badge-transfer";
+      return "badge-other";
+    }
+
+    function fetchData() {
+      if (isFetching) return;
+      isFetching = true;
+      var icon = document.getElementById("refreshIcon");
+      if (icon) icon.classList.add("animate-spin");
+      document.getElementById("syncStatus").innerText = "กำลังรีเฟรชข้อมูล...";
+
+      fetch(WEBHOOK_URL + "?api=data")
+        .then(function(r) { return r.json(); })
+        .then(onDataLoaded)
+        .catch(onDataError);
+    }
+
+    function onDataLoaded(res) {
+      isFetching = false;
+      var icon = document.getElementById("refreshIcon");
+      if (icon) icon.classList.remove("animate-spin");
+
+      if (!res || res.status !== "success") {
+        document.getElementById("syncStatus").innerText = "ไม่พบข้อมูล";
+        return;
+      }
+
+      headers = res.headers || [];
+      rawData = res.rows || [];
+
+      // Update KPIs
+      document.getElementById("kpiTotal").innerText = res.stats.total || rawData.length;
+      document.getElementById("kpiIssued").innerText = res.stats.issued || 0;
+      document.getElementById("kpiReceiving").innerText = res.stats.receiving || 0;
+      document.getElementById("kpiTransfer").innerText = res.stats.transfer || 0;
+      document.getElementById("syncStatus").innerText = "อัปเดตล่าสุด: " + (res.stats.lastSync || "เพิ่งซิงค์");
+
+      applyFilters();
+    }
+
+    function onDataError(err) {
+      isFetching = false;
+      var icon = document.getElementById("refreshIcon");
+      if (icon) icon.classList.remove("animate-spin");
+      document.getElementById("syncStatus").innerText = "การเชื่อมต่อขัดข้อง ชั่วคราว";
+    }
+
+    function setFilterType(type) {
+      currentFilterType = type;
+      ["ALL", "ISSUED", "RECEIVING", "TRANSFER", "RTS"].forEach(function(t) {
+        var btn = document.getElementById("btnFilter" + t);
+        if (btn) {
+          if (t === type) {
+            btn.className = "px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-white transition whitespace-nowrap";
+          } else {
+            btn.className = "px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition whitespace-nowrap";
+          }
+        }
+      });
+      applyFilters();
+    }
+
+    function applyFilters() {
+      var q = (document.getElementById("searchInput").value || "").toLowerCase().trim();
+      var typeIdx = headers.indexOf("Transaction Type");
+
+      var filtered = rawData.filter(function(row) {
+        var tType = typeIdx >= 0 ? String(row[typeIdx] || "").toUpperCase() : "";
+        if (currentFilterType !== "ALL" && tType.indexOf(currentFilterType) === -1) {
+          return false;
+        }
+        if (q) {
+          var match = row.some(function(cell) { return String(cell || "").toLowerCase().indexOf(q) !== -1; });
+          if (!match) return false;
+        }
+        return true;
+      });
+
+      renderMobileCards(filtered);
+      renderDesktopTable(filtered);
+    }
+
+    function renderMobileCards(items) {
+      var container = document.getElementById("mobileCardContainer");
+      if (!items || items.length === 0) {
+        container.innerHTML = '<div class="text-center py-12 text-slate-400 text-xs">ไม่พบรายการข้อมูลที่ค้นหา</div>';
+        return;
+      }
+
+      var h = {
+        tNo: headers.indexOf("Transaction NO"),
+        type: headers.indexOf("Transaction Type"),
+        pn: headers.indexOf("P/N"),
+        qty: headers.indexOf("QTY"),
+        loc: headers.indexOf("Location"),
+        bin: headers.indexOf("Bin"),
+        wo: headers.indexOf("W/O - S/O"),
+        issued: headers.indexOf("Issued To"),
+        date: headers.indexOf("Created Date"),
+        name: headers.indexOf("Name")
+      };
+
+      var html = items.map(function(r, idx) {
+        var type = r[h.type] || "TRANSACTION";
+        var badgeClass = getBadgeClass(type);
+        var pn = r[h.pn] || "-";
+        var qty = r[h.qty] || "-";
+        var bin = r[h.bin] || "-";
+        var loc = r[h.loc] || "DM01";
+        var tNo = r[h.tNo] || "-";
+        var wo = r[h.wo] || "";
+        var issued = r[h.issued] || "";
+        var date = r[h.date] || "";
+
+        return '<div class="bg-white p-4 rounded-2xl border border-slate-200 card-shadow space-y-2.5">' +
+          '<div class="flex items-center justify-between">' +
+            '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold ' + badgeClass + '">' + type + '</span>' +
+            '<span class="text-[11px] text-slate-400 font-mono">#' + tNo + '</span>' +
+          '</div>' +
+          '<div>' +
+            '<div class="text-base font-bold text-slate-800">' + pn + '</div>' +
+            '<div class="flex items-center space-x-2 text-xs text-slate-500 mt-1">' +
+              '<span class="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 font-mono text-[11px]">' + loc + ' / ' + bin + '</span>' +
+              '<span class="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold text-[11px]">QTY: ' + qty + '</span>' +
+            '</div>' +
+          '</div>' +
+          (wo || issued ? '<div class="pt-2 border-t border-slate-100 text-xs text-slate-600 flex flex-wrap gap-x-3">' +
+            (wo ? '<span>W/O: <strong class="text-slate-800">' + wo + '</strong></span>' : '') +
+            (issued ? '<span>To: <strong class="text-slate-800">' + issued + '</strong></span>' : '') +
+          '</div>' : '') +
+          '<div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">' +
+            '<span>' + date + '</span>' +
+            '<button onclick="openModalByIdx(' + idx + ')" class="text-indigo-600 font-semibold hover:underline">ดูข้อมูลทั้งหมด →</button>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+
+      container.innerHTML = html;
+    }
+
+    function renderDesktopTable(items) {
+      var tbody = document.getElementById("desktopTableBody");
+      if (!items || items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400">ไม่พบข้อมูลที่ค้นหา</td></tr>';
+        return;
+      }
+
+      var h = {
+        tNo: headers.indexOf("Transaction NO"),
+        type: headers.indexOf("Transaction Type"),
+        pn: headers.indexOf("P/N"),
+        qty: headers.indexOf("QTY"),
+        bin: headers.indexOf("Bin"),
+        batch: headers.indexOf("Batch"),
+        wo: headers.indexOf("W/O - S/O"),
+        issued: headers.indexOf("Issued To"),
+        date: headers.indexOf("Created Date"),
+        name: headers.indexOf("Name")
+      };
+
+      var html = items.map(function(r, idx) {
+        var type = r[h.type] || "-";
+        var badgeClass = getBadgeClass(type);
+        return '<tr class="hover:bg-slate-50/80 transition group">' +
+          '<td class="px-3.5 py-3 whitespace-nowrap"><span class="px-2 py-0.5 rounded-full text-[11px] font-semibold ' + badgeClass + '">' + type + '</span></td>' +
+          '<td class="px-3.5 py-3 font-semibold text-slate-800 whitespace-nowrap">' + (r[h.pn] || "-") + '</td>' +
+          '<td class="px-3.5 py-3 whitespace-nowrap font-mono font-medium">' + (r[h.qty] || "-") + '</td>' +
+          '<td class="px-3.5 py-3 whitespace-nowrap text-slate-600 font-mono">' + (r[h.bin] || "-") + '</td>' +
+          '<td class="px-3.5 py-3 whitespace-nowrap text-slate-500 font-mono text-[11px]">' + (r[h.batch] || "-") + '</td>' +
+          '<td class="px-3.5 py-3 whitespace-nowrap font-medium text-slate-700">' + (r[h.wo] || "-") + '</td>' +
+          '<td class="px-3.5 py-3 whitespace-nowrap text-slate-600">' + (r[h.issued] || "-") + '</td>' +
+          '<td class="px-3.5 py-3 whitespace-nowrap text-slate-400 text-[11px]">' + (r[h.date] || "-") + '<br>' + (r[h.name] || "") + '</td>' +
+          '<td class="px-3.5 py-3 text-right whitespace-nowrap">' +
+            '<button onclick="openModalByIdx(' + idx + ')" class="px-2.5 py-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition">ดูครบ 27 ฟิลด์</button>' +
+          '</td>' +
+        '</tr>';
+      }).join("");
+
+      tbody.innerHTML = html;
+    }
+
+    function openModalByIdx(idx) {
+      var r = rawData[idx];
+      if (!r) return;
+      var modal = document.getElementById("detailModal");
+      var body = document.getElementById("modalBody");
+      var title = document.getElementById("modalTitle");
+      var subtitle = document.getElementById("modalSubtitle");
+
+      var typeIdx = headers.indexOf("Transaction Type");
+      var pnIdx = headers.indexOf("P/N");
+      var tNoIdx = headers.indexOf("Transaction NO");
+
+      title.innerText = (r[pnIdx] || "Part Number") + " (" + (r[typeIdx] || "Record") + ")";
+      subtitle.innerText = "Transaction NO: " + (r[tNoIdx] || "-");
+
+      var fieldsHtml = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">';
+      for (var i = 0; i < headers.length; i++) {
+        var h = headers[i];
+        if (h === "Last Synced") continue;
+        var val = r[i] !== undefined && r[i] !== null && String(r[i]).trim() !== "" ? String(r[i]) : "-";
+        fieldsHtml += '<div class="p-2.5 bg-slate-50 rounded-xl border border-slate-100">' +
+          '<div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-0.5">' + h + '</div>' +
+          '<div class="text-xs font-semibold text-slate-800 break-words font-mono">' + val + '</div>' +
+        '</div>';
+      }
+      fieldsHtml += '</div>';
+      body.innerHTML = fieldsHtml;
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function closeModal() {
+      var modal = document.getElementById("detailModal");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    // Initial fetch on page load, then poll every 30 seconds
+    window.onload = function() {
+      fetchData();
+      setInterval(fetchData, 30000);
+    };
+  </script>
+</body>
+</html>

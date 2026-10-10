@@ -1,0 +1,14 @@
+# Secrets
+.env
+
+# Runtime data
+data/*
+!data/gse_dashboard.html
+!data/login.html
+!data/log_sheet_apps_script.js
+
+# Binaries / caches
+*.exe
+__pycache__/
+*.pyc
+*.log
