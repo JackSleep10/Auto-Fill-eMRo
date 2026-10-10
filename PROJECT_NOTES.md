@@ -195,3 +195,33 @@
 > ในการทำงานครั้งต่อไป เมื่อผู้ใช้งานสั่งให้แก้ไข, เพิ่มฟีเจอร์, แก้บัก หรือปรับแต่งระบบใด ๆ:  
 > 1. ต้องเข้ามาอัปเดตรายละเอียดสิ่งที่แก้ไข สาเหตุ และผลการทำงาน ลงในไฟล์ `PROJECT_NOTES.md` นี้ทุกครั้ง  
 > 2. บันทึกวันเวลาและหัวข้อการแก้ไขให้ชัดเจน เพื่อเป็นประวัติเตือนความจำของโปรเจกต์
+
+
+---
+
+## 🛡️ 2026-10-10 — Audit Fixes (Phase 0–3)
+
+**Phase 0 – Safety net**
+- Full backup: `D:\Project dashboard_backup_20261010`; history backup in `data/backup/`.
+- `git init` + `.gitignore` (excludes `.env`, `data/*` runtime files, `*.exe`, logs).
+
+**Phase 1 – History integrity (C3, C4 + duplicate bug)**
+- New `scraper/history_store.py` = the ONLY writer/reader of `data/work_order_history.json`:
+  thread lock, dedup by W/O number, refuses to overwrite an unreadable file, atomic write (`.tmp` + `os.replace`), `.bak` copy.
+- `web_app.py` (`/api/create-single`, `/api/history`) and `GSEWorkOrderCreator.log_to_google_sheet` now use it.
+- Bug confirmed & fixed: CM W/O were saved twice (web_app + log_to_google_sheet). `2351505`, `2351506` deduplicated (197 → 195). Pre-dedup copy: `data/backup/work_order_history_before_dedup.json`.
+- Tests: `tests/test_history_store.py` (4 passed: dedup, skip failed, 100 concurrent writers, corrupt-file protection).
+
+**Phase 2 – Security (password change / 2FA reset skipped by user decision)**
+- Removed hardcoded eMRO passwords & TOTP secrets from `scraper/config.py` → read only from `.env`. Redacted them from this notes file.
+- `FLASK_SECRET_KEY` added to `.env` (random 64 hex); no hardcoded default.
+- Session cookie `HttpOnly` + `SameSite=Lax` (blocks cross-site POST / CSRF).
+- Removed `"TL248005"` fallback user in `/api/start-batch` and `/api/create-single`.
+- ⚠️ Still open: web login passwords = employee IDs (`VALID_USERS`), and old TOTP secrets should be reset by eMRO admin.
+
+**Phase 3 – Stability**
+- `os.chdir(Config.BASE_DIR)` at startup → relative paths work from any launch folder.
+- File logging: `data/logs/web_app.log` (rotating 5MB × 5).
+- Server now runs on `waitress` (16 threads); PID written to `data/web_app.pid`.
+- `start_online.bat` no longer kills every `python.exe` — only the PID in `data/web_app.pid` + cloudflared.
+- `requirements.txt`: added `flask`, `waitress`; pinned all versions.
