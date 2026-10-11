@@ -160,7 +160,11 @@ class GSEWorker:
         future = asyncio.run_coroutine_threadsafe(coro, self.loop)
         return future.result(timeout=timeout)
 
-    async def get_creator(self, user="TL248005", slow_mo=40) -> GSEWorkOrderCreator:
+    async def get_creator(self, user: str, slow_mo=40) -> GSEWorkOrderCreator:
+        user_clean = (user or "").strip().upper()
+        if not user_clean:
+            raise ValueError("User must be specified to acquire eMRO session.")
+
         if self.creator is not None:
             if not self.creator.is_alive():
                 logger.warning("[GSEWorker] Creator page or context was closed. Recreating session...")
@@ -169,15 +173,23 @@ class GSEWorker:
                 except Exception:
                     pass
                 self.creator = None
+            elif getattr(self.creator, "user", None) != user_clean or getattr(self.creator, "current_user", None) != user_clean:
+                # Active session belongs to a different user (e.g. TL248005 vs TL248006). Close cleanly to switch!
+                logger.info(f"[GSEWorker] Active eMRO session is for '{getattr(self.creator, 'user', None)}', but requested by '{user_clean}'. Switching session cleanly...")
+                try:
+                    await self.creator.close()
+                except Exception:
+                    pass
+                self.creator = None
 
         if self.creator is None:
-            logger.info(f"[GSEWorker] Launching persistent warm browser session (slow_mo={slow_mo}ms)...")
-            self.creator = GSEWorkOrderCreator(headless=False, slow_mo=slow_mo)
+            logger.info(f"[GSEWorker] Launching browser session for {user_clean} (headless={Config.HEADLESS}, slow_mo={slow_mo}ms)...")
+            self.creator = GSEWorkOrderCreator(user=user_clean, headless=Config.HEADLESS, slow_mo=slow_mo)
             await self.creator.start()
-            await self.creator.ensure_logged_in(user=user)
+            await self.creator.ensure_logged_in(user=user_clean)
         else:
             self.creator.slow_mo = slow_mo
-            await self.creator.ensure_logged_in(user=user)
+            await self.creator.ensure_logged_in(user=user_clean)
 
         return self.creator
 
@@ -191,7 +203,7 @@ class GSEWorker:
 
 WORKER = GSEWorker()
 
-def run_batch_thread(items, user="TL248005"):
+def run_batch_thread(items, user: str):
     global BATCH_STATE
     BATCH_STATE["is_running"] = True
     BATCH_STATE["total"] = len(items)
@@ -431,18 +443,8 @@ def init_log_sheet():
     success = GSEWorkOrderCreator.init_log_sheet_headers()
     return jsonify({"success": success, "message": "Headers initialized on Master Log Sheet" if success else "Failed to initialize headers"})
 
-def prewarm_worker():
-    import time
-    time.sleep(2)
-    logger.info("[Prewarm] Background pre-warming GSE browser session...")
-    try:
-        with WORKER.lock:
-            WORKER.run_coro(WORKER.get_creator("TL248005", slow_mo=40), timeout=90)
-        logger.info("[Prewarm] GSE browser session pre-warmed and ready for instant work orders!")
-    except Exception as e:
-        logger.warning(f"[Prewarm] Pre-warm notice: {e}")
-
-threading.Thread(target=prewarm_worker, daemon=True).start()
+# No eager browser prewarm with a hardcoded user on startup.
+# Each user acquires their own clean eMRO browser session on-demand when creating work orders.
 
 @app.route("/api/sync-sheets", methods=["POST"])
 def sync_sheets():

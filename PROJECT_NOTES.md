@@ -225,3 +225,25 @@
 - Server now runs on `waitress` (16 threads); PID written to `data/web_app.pid`.
 - `start_online.bat` no longer kills every `python.exe` — only the PID in `data/web_app.pid` + cloudflared.
 - `requirements.txt`: added `flask`, `waitress`; pinned all versions.
+
+---
+
+## 👤 2026-10-11 — Per-User eMRO Session Isolation & Removed Startup TL248005 Prewarm
+
+**ปัญหาที่พบ:**
+1. ตอนรัน `start_online.bat` จะมีหน้าต่าง Chromium เด้งขึ้นมาบนจอ และล็อกอินเข้า eMRO ด้วยรหัส `TL248005` ค้างไว้ (Standby) เนื่องจากใน `web_app.py` มีฟังก์ชัน `prewarm_worker()` ที่ Hardcode สั่งให้ล็อกอิน `TL248005` และฝืน `headless=False`
+2. หากมีผู้ใช้งานคนอื่น เช่น `TL248006` ล็อกอินเข้าใช้งานผ่านหน้าเว็บเพื่อเปิดใบงาน เซสชันในเบราว์เซอร์จะยังค้างหรือปะปนกับ `TL248005` ทำให้ในระบบ eMRO บันทึกชื่อผู้เปิดใบงานผิดคน (Created by: TL248005 แทนที่จะเป็น TL248006) เสียระบบ Audit Trail และ accountability
+
+**การแก้ไขที่ดำเนินการ:**
+1. **ลบ `prewarm_worker()` ออกจากการเปิดเซิร์ฟเวอร์:**
+   - เมื่อรัน `start_online.bat` ระบบจะสตาร์ทเฉพาะ Web Server และ Cloudflare Tunnel ทันที (บูตเร็วใน 1 วินาที)
+   - ไม่มีการเด้งหน้าต่างเบราว์เซอร์ eMRO ขึ้นมากวนหน้าจอ และไม่มีการล็อกอินค้างเป็นใครไว้ล่วงหน้า
+2. **ระบบ On-Demand Per-User Session:**
+   - เบราว์เซอร์ eMRO จะเริ่มทำงานเมื่อผู้ใช้กดสั่งเปิดใบงานจริงบนเว็บเท่านั้น
+   - แยกพื้นที่จัดเก็บโปรไฟล์เบราว์เซอร์/คุกกี้ตามรหัสผู้ใช้เป็นสัดส่วนชัดเจน: `data/browser_session/<USER>` เช่น `TL248005` และ `TL248006` ไม่ปะปนกัน
+   - `GSEWorker.get_creator(user)`: ตรวจสอบความตรงกันของผู้ใช้ หากเซสชันที่เปิดอยู่ไม่ใช่ของผู้ใช้คนปัจจุบัน ระบบจะทำการปิดเซสชันเดิมอย่างสมบูรณ์ และเปิดเซสชันใหม่ด้วย Credentials/2FA ของผู้ใช้คนนั้นโดยเฉพาะ
+3. **รองรับ Headless ตาม `.env`:**
+   - ปรับ `web_app.py` และ `scraper/gse_wo_creator.py` ให้ใช้ `headless=Config.HEADLESS` (ตามค่าใน `.env` ซึ่งปัจจุบันตั้งไว้เป็น `HEADLESS=true`)
+   - ระบบทำงานในแบ็กกราวด์อย่างเงียบๆ ไม่เด้งหน้าต่างกวนหน้าจอ แต่ยังสามารถดูหน้าจอ Live Screen ผ่านหน้าเว็บ Dashboard ได้ 100% ตามปกติ
+4. **ลบ Default TL248005 ทุกจุด:**
+   - ปรับ `run_batch_thread` และ `create_single_wo` ให้รับค่า `user` จาก Session ของผู้ที่ล็อกอินจริงเสมอ

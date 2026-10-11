@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("GSEWorkOrderCreator")
 
 class GSEWorkOrderCreator:
-    def __init__(self, headless: bool = False, slow_mo: int = 50):
+    def __init__(self, user: str = "TL248005", headless: bool = False, slow_mo: int = 50):
+        self.user = (user or "TL248005").strip().upper()
         self.headless = headless
         self.slow_mo = slow_mo
         self.playwright = None
@@ -31,11 +32,13 @@ class GSEWorkOrderCreator:
             return False
 
     async def start(self):
-        """Initializes the Playwright persistent browser session."""
-        logger.info(f"[GSE Creator] Launching browser session (slow_mo={self.slow_mo}ms)...")
+        """Initializes the Playwright persistent browser session for this specific user."""
+        user_session_dir = Config.SESSION_DIR / self.user
+        user_session_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"[GSE Creator] Launching browser session for {self.user} (headless={self.headless}, slow_mo={self.slow_mo}ms, dir={user_session_dir})...")
         self.playwright = await async_playwright().start()
         self.context = await self.playwright.chromium.launch_persistent_context(
-            user_data_dir=str(Config.SESSION_DIR),
+            user_data_dir=str(user_session_dir),
             headless=self.headless,
             slow_mo=self.slow_mo,
             args=["--start-maximized"] if not self.headless else [],
@@ -67,9 +70,11 @@ class GSEWorkOrderCreator:
             await self.playwright.stop()
         logger.info("[GSE Creator] Browser closed.")
 
-    async def ensure_logged_in(self, user: str = "TL248005") -> bool:
+    async def ensure_logged_in(self, user: Optional[str] = None) -> bool:
         """Navigates to eMRO and handles login and 2FA if required."""
-        user_upper = (user or Config.EMRO_USERNAME or "TL248005").strip().upper()
+        user_upper = (user or self.user or Config.EMRO_USERNAME or "").strip().upper()
+        if not user_upper:
+            raise ValueError("No user specified for eMRO login.")
         if not Config.has_emro_account(user_upper):
             raise ValueError(f"บัญชี '{user_upper}' ยังไม่ได้เชื่อมต่อกับระบบ eMRO (ไม่มีรหัสผ่าน/2FA) กรุณาติดต่อผู้ดูแลระบบเพื่อลงทะเบียนก่อนเปิดใบงาน")
 
@@ -390,13 +395,14 @@ class GSEWorkOrderCreator:
         location: str = "DMK",
         site: str = "APRON",
         expenditure: str = "GSE WO",
-        user: str = "TL248005"
+        user: Optional[str] = None
     ) -> Dict:
         """
         Creates a single GSE Work Order in eMRO.
         Returns a dict with generated details: { success, wo_number, gse, sn, description, priority, error }
         """
         now = datetime.now()
+        actual_user = (user or self.user or self.current_user or Config.EMRO_USERNAME or "").strip().upper()
         result = {
             "success": False,
             "wo_number": "",
@@ -404,7 +410,7 @@ class GSEWorkOrderCreator:
             "sn": "",
             "priority": priority.strip().upper(),
             "description": description.strip(),
-            "user": user,
+            "user": actual_user,
             "created_at": now.strftime("%Y-%m-%d %H:%M:%S"),
             "date": f"{now.month}/{now.day}/{now.year}",
             "error": ""
