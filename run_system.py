@@ -127,6 +127,15 @@ def main():
                 pass
         time.sleep(1)
 
+    # Auto sync latest Online URL to Google Sheet for outside users
+    if cf_url.startswith("https://"):
+        try:
+            import threading
+            from scraper.sheet_url_sync import sync_online_url_to_sheet
+            threading.Thread(target=sync_online_url_to_sheet, args=(cf_url, lan_ip), daemon=True).start()
+        except Exception:
+            pass
+
     # Open local browser once server is confirmed ready
     if server_ready:
         try:
@@ -141,8 +150,9 @@ def main():
     print(f"\n  [1] ลิงก์ภายในวงเน็ต (LAN / Wi-Fi) : http://{lan_ip}:8000")
     print("      (ลิงก์คงที่ ไม่เปลี่ยน เข้าได้ทุกเครื่องในออฟฟิศ/วงเน็ตเดียวกัน)\n")
     print(f"  [2] ลิงก์ออนไลน์ภายนอก (Cloudflare) : {cf_url}")
-    print("      (สำหรับเข้านอกสถานที่ / เชื่อมต่อผ่านเน็ตมือถือ 4G/5G)\n")
-    print("  [3] ลิงก์เครื่องนี้ (Localhost)      : http://localhost:8000\n")
+    print("      (สำหรับเข้านอกสถานที่ / เชื่อมต่อผ่านเน็ตมือถือ 4G/5G)")
+    print("      * อัปเดตลิงก์ไปยัง Google Sheet (แท็บ Live Transactions) เรียบร้อยแล้ว\n")
+    print(f"  [3] ลิงก์เครื่องนี้ (Localhost)      : http://localhost:8000\n")
     print("-" * 66)
     print("  สถานะ: ระบบออนไลน์พร้อมใช้งานแล้ว! (Online and Ready)")
     print("\n  * เปิดหน้าต่างนี้ค้างไว้ตลอดการใช้งาน")

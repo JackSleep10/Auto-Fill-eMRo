@@ -29,12 +29,23 @@
    - ต้องส่งข้อมูลทาง Background Thread เสมอ เพื่อให้หน้าเว็บส่งผลลัพธ์ W/O ให้ผู้ใช้เห็นทันที โดยไม่ต้องรอ Network Round-Trip ของ Google Sheets
 
 6. **การแยกการบันทึกข้อมูล Sheet (Sheet Separation & Audit Policy)**
-   - **Monthly PM Tracking Sheet (`1luje0x1QX...`):** กำหนดสำหรับงาน **PM ตามรอบเดือนเท่านั้น** ห้ามนำรายการ CM (แจ้งซ่อมด่วน) ไปบันทึกปะปนเด็ดขาด
-   - **Master W/O Log Sheet (`1BdMWDX9...`):** ศูนย์รวม **LOG ประวัติการเปิดใบงานทั้งหมด** (ทั้ง CM และ PM) สำหรับตรวจสอบย้อนหลังว่าใครเปิด รถอะไร เลข W/O อะไร อาการอะไร และเวลาใด
+   - **Monthly PM Tracking Sheet (`1luje0x1QX...`):** กำหนดสำหรับงาน **PM ตามรอบเดือนเท่านั้น** บันทึกเฉพาะงาน PM จากหน้าเปิดใบงานชุด (Batch PM) ห้ามนำรายการ CM (แจ้งซ่อมด่วน) ไปบันทึกปะปนเด็ดขาด
+   - **Master W/O Log Sheet (`1BdMWDX9...`):** หรือ **sheet บันทึกข้อมูล W/O** สำหรับบันทึก **รายการแจ้งซ่อมด่วน (CM) เท่านั้น** โดยงานจากหน้าเปิดใบ PM หลายใบจะไม่ถูกนำมาลงใน Sheet นี้ เพื่อป้องกันไม่ให้ข้อมูลงาน PM รายเดือนไปปะปนกับบันทึกการแจ้งซ่อมด่วน
 
 ---
 
 ## 📜 2. ประวัติการแก้ไขและเหตุการณ์สำคัญ (Changelog & Incident History)
+
+### [2026-10-20] ปรับปรุงหน้าเปิดใบ PM หลายใบไม่บันทึกลง Sheet บันทึกข้อมูล W/O
+- **ความต้องการของผู้ใช้:**
+  - ปรับแก้ไขให้หน้าเปิดใบ PM หลายใบ (Batch PM) ไม่ต้องเอาข้อมูลไปลง sheet บันทึกข้อมูล W/O (Master W/O Log Sheet: `1BdMWDX9anf2wD1_yLTH3S1LRBSuWCIKPAjKUOpPIrhA`)
+- **การแก้ไข:**
+  1. แก้ไข [web_app.py](file:///D:/Project%20dashboard/web_app.py) ในฟังก์ชัน `run_batch_thread`:
+     - ตัดการเรียก `GSEWorkOrderCreator.log_to_google_sheet(BATCH_STATE["results"])` ออก
+     - บันทึกประวัติลงไฟล์เครื่อง local (`append_history`) เพื่อแสดงผลในแท็บประวัติบนเว็บตามปกติ
+     - ส่งข้อมูลเฉพาะเข้า Monthly PM Tracking Sheet (`sync_to_google_sheet`) สำหรับติดตามงาน PM ตามรอบเดือนเท่านั้น
+  2. ปรับปรุง [scraper/gse_wo_creator.py](file:///D:/Project%20dashboard/scraper/gse_wo_creator.py) ในฟังก์ชัน `log_to_google_sheet`:
+     - เพิ่มตัวกรองคัดกรองอัตโนมัติ ตัดรายการที่เป็น `PM` หรือ `SCHED` ออกก่อนส่งเข้า Master W/O Log Sheet (sheet บันทึกข้อมูล W/O) เพื่อให้รองรับเฉพาะรายการแจ้งซ่อมด่วน (`CM` / `UNSCHED`) อย่างปลอดภัยแบบสองชั้น (Defense in Depth)
 
 ### [2026-10-04] แยกการจัดเก็บ Sheet และสร้างหัวตาราง Master W/O Log Sheet
 - **ความต้องการของผู้ใช้:**
@@ -247,3 +258,23 @@
    - ระบบทำงานในแบ็กกราวด์อย่างเงียบๆ ไม่เด้งหน้าต่างกวนหน้าจอ แต่ยังสามารถดูหน้าจอ Live Screen ผ่านหน้าเว็บ Dashboard ได้ 100% ตามปกติ
 4. **ลบ Default TL248005 ทุกจุด:**
    - ปรับ `run_batch_thread` และ `create_single_wo` ให้รับค่า `user` จาก Session ของผู้ที่ล็อกอินจริงเสมอ
+
+
+---
+
+## 🌐 2026-10-21 — Auto-Sync Online URL to Google Sheet (Free Solution for Outside Network Users)
+
+**ปัญหาที่พบ:**
+1. คอมพิวเตอร์ที่อยู่นอกเครือข่ายออฟฟิศ (เช่น ทำงานจากที่บ้าน, มือถือ 4G/5G, หรืออยู่นอกวง Wi-Fi) ไม่สามารถเข้าใช้งานผ่าน Local IP (`http://172.21.1.111:8000`) ได้ เนื่องจากเป็น Private LAN IP
+2. ลิงก์ภายนอกของ Cloudflare Quick Tunnel (`*.trycloudflare.com`) จะเปลี่ยน URL ทุกครั้งที่มีการรีสตาร์ท ทำให้คนที่อยู่นอกเครือข่ายไม่ทราบลิงก์ปัจจุบัน และลิงก์เดิมที่เคยบันทึกไว้จะหมดอายุ
+
+**การแก้ไขที่ดำเนินการ (แบบฟรี 100%):**
+1. **สร้างโมดูล `scraper/sheet_url_sync.py`:**
+   - ทำหน้าที่ส่ง URL ออนไลน์ล่าสุด (Cloudflare) และ LAN IP ขึ้นไปอัปเดตลง Google Sheet ของแผนก (`1luje0x1QXrhhucSvmO6h_k5Es91X8rCcJeP2Fet7uYs`) โดยอัตโนมัติ
+   - แสดงผลในแท็บ **`Live Transactions`** พร้อมบอกประเภทการเชื่อมต่อ, วันที่-เวลาที่อัปเดต และสถานะ `ONLINE`
+2. **ผูกระบบ Auto-Sync ในตัวเรียกใช้งาน:**
+   - ใน `run_system.py` (Desktop shortcut `Start_GSE_Work_Order.bat`): เมื่อตรวจพบ Cloudflare URL จะยิงซิงก์ขึ้น Google Sheet ในเบื้องหลังทันที
+   - ใน `start_online.bat`: เพิ่มคำสั่งส่ง URL ขึ้น Google Sheet ทันทีหลังเชื่อมต่อ Tunnel สำเร็จ
+   - ใน `web_app.py`: เพิ่ม endpoint `/api/sync-online-url` สำหรับสั่งกดซิงก์ซ้ำได้ตลอดเวลา
+3. **ผลลัพธ์:**
+   - ผู้ใช้งานนอกเครือข่ายเพียงแค่เปิด Google Sheet แผ่นงาน GSE ที่ใช้งานอยู่ประจำ จะเห็นลิงก์ออนไลน์ล่าสุดของวันนั้นทันที สามารถคลิกเข้าใช้งานได้จากทุกที่ ทุกอุปกรณ์ โดยไม่ต้องคอยถามลิงก์ใหม่จากผู้เปิดเครื่อง

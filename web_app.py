@@ -241,10 +241,15 @@ def run_batch_thread(items, user: str):
             save_batch_results(BATCH_STATE["results"])
             log_batch(f"Batch task completed! Finished {len(items)} items.")
 
-            # Auto sync to Google Sheets (PM Tracking Sheet & Master Log Sheet)
-            log_batch("Syncing results to Google Sheets...")
+            # Save to local history
+            try:
+                append_history(BATCH_STATE["results"])
+            except Exception as he:
+                logger.exception(f"Failed to save local history: {he}")
+
+            # Auto sync to Monthly PM Tracking Sheet (PM items only; Master Log Sheet / บันทึกข้อมูล W/O is excluded)
+            log_batch("Syncing results to Monthly PM Tracking Sheet...")
             GSEWorkOrderCreator.sync_to_google_sheet(BATCH_STATE["results"])
-            GSEWorkOrderCreator.log_to_google_sheet(BATCH_STATE["results"])
             log_batch("Google Sheets sync completed!")
 
         except Exception as e:
@@ -445,6 +450,33 @@ def init_log_sheet():
 
 # No eager browser prewarm with a hardcoded user on startup.
 # Each user acquires their own clean eMRO browser session on-demand when creating work orders.
+
+@app.route("/api/sync-online-url", methods=["POST", "GET"])
+def api_sync_online_url():
+    from scraper.sheet_url_sync import sync_online_url_to_sheet
+    import re
+    cf_url = ""
+    log_file = Config.BASE_DIR / "data" / "cloudflare.log"
+    if log_file.exists():
+        try:
+            content = log_file.read_text(encoding="utf-8", errors="ignore")
+            m = re.findall(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", content)
+            if m:
+                cf_url = m[-1]
+        except Exception:
+            pass
+
+    if not cf_url:
+        return jsonify({"success": False, "error": "No active Cloudflare online URL found in log."}), 404
+
+    lan_ip = get_lan_ip()
+    ok = sync_online_url_to_sheet(cf_url, lan_ip=lan_ip)
+    return jsonify({
+        "success": ok,
+        "cf_url": cf_url,
+        "lan_ip": lan_ip,
+        "message": "Online URL synced to Google Sheet successfully!" if ok else "Failed to sync to Google Sheet"
+    })
 
 @app.route("/api/sync-sheets", methods=["POST"])
 def sync_sheets():

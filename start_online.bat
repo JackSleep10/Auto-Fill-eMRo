@@ -29,6 +29,9 @@ for /l %%i in (1,1,6) do (
     )
 )
 
+:: Auto sync latest Online URL to Google Sheet
+start /b python -c "from scraper.sheet_url_sync import sync_online_url_to_sheet; sync_online_url_to_sheet('%%CF_URL%%')" >nul 2>&1
+
 cls
 echo ================================================================
 echo   THAI LION AIR - GSE WORK ORDER CREATOR
