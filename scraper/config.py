@@ -10,7 +10,8 @@ load_dotenv(BASE_DIR / ".env", override=True)
 
 class Config:
     BASE_DIR = BASE_DIR
-    EMRO_URL = os.getenv("EMRO_URL", "https://emro.lionair.com/emro/Home.trax")
+    EMRO_URL = os.getenv("EMRO_URL", "https://emro.lionairthai.com/emro/Home.trax")
+    EMRO_FALLBACK_URL = os.getenv("EMRO_FALLBACK_URL", "https://emro.lionair.com/emro/Home.trax")
     EMRO_USERNAME = os.getenv("EMRO_USERNAME", "")
     EMRO_PASSWORD = os.getenv("EMRO_PASSWORD", "")
     EMRO_TOTP_SECRET = os.getenv("EMRO_TOTP_SECRET", "").strip()

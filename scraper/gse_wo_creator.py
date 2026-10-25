@@ -84,7 +84,7 @@ class GSEWorkOrderCreator:
         if self.current_user == user_upper and self.page and not self.page.is_closed():
             try:
                 curr_url = self.page.url
-                if "emro.lionair.com" in curr_url and ("Home.trax" in curr_url or "Dashboard" in curr_url):
+                if ("emro.lionair.com" in curr_url or "emro.lionairthai.com" in curr_url) and ("Home.trax" in curr_url or "Dashboard" in curr_url):
                     submit_btn = self.page.locator('#mainForm\\:j_idt169, button:has-text("Submit")').first
                     if not await submit_btn.is_visible():
                         logger.info(f"[GSE Creator] Session already active and logged in as {user_upper}.")
@@ -101,34 +101,53 @@ class GSEWorkOrderCreator:
                 pass
             self.current_user = None
 
-        logger.info(f"[GSE Creator] Navigating to {Config.EMRO_URL} (Target User: {user_upper})...")
-        goto_resp = await self.page.goto(Config.EMRO_URL, wait_until="load", timeout=30000)
-        await asyncio.sleep(2)
+        # Build list of URLs to try (primary + fallback)
+        target_urls = [Config.EMRO_URL]
+        fallback_url = getattr(Config, "EMRO_FALLBACK_URL", None)
+        if fallback_url and fallback_url != Config.EMRO_URL and fallback_url not in target_urls:
+            target_urls.append(fallback_url)
 
-        # 1. Detect if eMRO server is down or returning HTTP 502/503/504 Bad Gateway
-        page_title = (await self.page.title()) or ""
-        status_code = goto_resp.status if goto_resp else 200
+        login_opened = False
+        last_error = ""
 
-        # Check by HTTP status code or Cloudflare error page content
-        is_server_error = status_code >= 500
-        if not is_server_error:
+        for target_url in target_urls:
+            logger.info(f"[GSE Creator] Navigating to {target_url} (Target User: {user_upper})...")
             try:
-                body_text = (await self.page.inner_text("body", timeout=1500)) or ""
-                if "Bad gateway" in body_text or "Error code 502" in body_text or "Host Error" in body_text or "502 Bad Gateway" in page_title:
-                    is_server_error = True
-            except Exception:
-                pass
+                goto_resp = await self.page.goto(target_url, wait_until="load", timeout=30000)
+                await asyncio.sleep(2)
 
-        if is_server_error:
+                page_title = (await self.page.title()) or ""
+                status_code = goto_resp.status if goto_resp else 200
+
+                is_server_error = status_code >= 500
+                if not is_server_error:
+                    try:
+                        body_text = (await self.page.inner_text("body", timeout=1500)) or ""
+                        if "Bad gateway" in body_text or "Error code 502" in body_text or "Host Error" in body_text or "502 Bad Gateway" in page_title:
+                            is_server_error = True
+                    except Exception:
+                        pass
+
+                if is_server_error:
+                    logger.warning(f"[GSE Creator] {target_url} returned server error ({status_code} {page_title}). Trying alternate URL...")
+                    last_error = f"HTTP {status_code} Bad Gateway"
+                    continue
+
+                login_opened = True
+                break
+            except Exception as e:
+                logger.warning(f"[GSE Creator] Failed to navigate to {target_url}: {e}")
+                last_error = str(e)
+
+        if not login_opened:
             shot_file = Config.SCREENSHOTS_DIR / f"login_failure_{user_upper}.png"
             try:
                 await self.page.screenshot(path=str(shot_file))
             except Exception:
                 pass
             raise RuntimeError(
-                f"เซิร์ฟเวอร์ระบบ eMRO ของ Thai Lion Air (emro.lionair.com) ขัดข้องชั่วคราว "
-                f"(HTTP {status_code} Bad Gateway / Host Error) ไม่สามารถเปิดหน้าเว็บ eMRO ได้ในขณะนี้ "
-                f"กรุณารอสักครู่ให้ทางระบบ eMRO กลับมาทำงาน แล้วลองใหม่อีกครั้ง"
+                f"เซิร์ฟเวอร์ระบบ eMRO ของ Thai Lion Air ขัดข้องชั่วคราว ({last_error}) "
+                f"ไม่สามารถเปิดหน้าเว็บ eMRO ได้ในขณะนี้ กรุณารอสักครู่ให้ทางระบบ eMRO กลับมาทำงาน แล้วลองใหม่อีกครั้ง"
             )
 
         fav_locator = self.page.locator(':text("Favorites")').first
