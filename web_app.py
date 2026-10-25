@@ -173,7 +173,7 @@ class GSEWorker:
                 except Exception:
                     pass
                 self.creator = None
-            elif getattr(self.creator, "user", None) != user_clean or getattr(self.creator, "current_user", None) != user_clean:
+            elif getattr(self.creator, "user", None) != user_clean:
                 # Active session belongs to a different user (e.g. TL248005 vs TL248006). Close cleanly to switch!
                 logger.info(f"[GSEWorker] Active eMRO session is for '{getattr(self.creator, 'user', None)}', but requested by '{user_clean}'. Switching session cleanly...")
                 try:

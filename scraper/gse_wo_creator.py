@@ -102,8 +102,34 @@ class GSEWorkOrderCreator:
             self.current_user = None
 
         logger.info(f"[GSE Creator] Navigating to {Config.EMRO_URL} (Target User: {user_upper})...")
-        await self.page.goto(Config.EMRO_URL, wait_until="load", timeout=30000)
+        goto_resp = await self.page.goto(Config.EMRO_URL, wait_until="load", timeout=30000)
         await asyncio.sleep(2)
+
+        # 1. Detect if eMRO server is down or returning HTTP 502/503/504 Bad Gateway
+        page_title = (await self.page.title()) or ""
+        status_code = goto_resp.status if goto_resp else 200
+
+        # Check by HTTP status code or Cloudflare error page content
+        is_server_error = status_code >= 500
+        if not is_server_error:
+            try:
+                body_text = (await self.page.inner_text("body", timeout=1500)) or ""
+                if "Bad gateway" in body_text or "Error code 502" in body_text or "Host Error" in body_text or "502 Bad Gateway" in page_title:
+                    is_server_error = True
+            except Exception:
+                pass
+
+        if is_server_error:
+            shot_file = Config.SCREENSHOTS_DIR / f"login_failure_{user_upper}.png"
+            try:
+                await self.page.screenshot(path=str(shot_file))
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"เซิร์ฟเวอร์ระบบ eMRO ของ Thai Lion Air (emro.lionair.com) ขัดข้องชั่วคราว "
+                f"(HTTP {status_code} Bad Gateway / Host Error) ไม่สามารถเปิดหน้าเว็บ eMRO ได้ในขณะนี้ "
+                f"กรุณารอสักครู่ให้ทางระบบ eMRO กลับมาทำงาน แล้วลองใหม่อีกครั้ง"
+            )
 
         fav_locator = self.page.locator(':text("Favorites")').first
         mfa_dlg = self.page.locator('#mainForm\\:MFADlg')
@@ -213,7 +239,18 @@ class GSEWorkOrderCreator:
                 await self.page.screenshot(path=str(shot_file))
             except Exception:
                 pass
-            raise RuntimeError(f"Login to eMRO as {user_upper} failed: Dashboard (Favorites) not found after authentication.")
+
+            err_detail = ""
+            try:
+                err_loc = self.page.locator('.ui-messages-error, .ui-growl-message, .ui-message-error, .ui-messages-error-detail').first
+                if await err_loc.is_visible():
+                    err_detail = (await err_loc.inner_text()).strip()
+            except Exception:
+                pass
+
+            if err_detail:
+                raise RuntimeError(f"เข้าสู่ระบบ eMRO ในชื่อ {user_upper} ไม่สำเร็จ: {err_detail}")
+            raise RuntimeError(f"เข้าสู่ระบบ eMRO ในชื่อ {user_upper} ไม่สำเร็จ: ไม่พบหน้า Dashboard (Favorites) หลังเข้าสู่ระบบ กรุณาตรวจสอบสถานะระบบ eMRO")
 
         logger.info(f"[GSE Creator] Successfully logged in and verified to eMRO as {user_upper}.")
         self.current_user = user_upper
@@ -659,7 +696,7 @@ class GSEWorkOrderCreator:
 
     @staticmethod
     def log_to_google_sheet(results: List[Dict]) -> bool:
-        """Sends all created W/O records (CM & PM) to Master Audit Log Sheet."""
+        """Sends created W/O records (excluding PM) to Master Audit Log Sheet."""
         from dotenv import load_dotenv
         load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
         url = os.getenv("LOG_APPS_SCRIPT_URL", Config.LOG_APPS_SCRIPT_URL) or os.getenv("APPS_SCRIPT_URL", Config.APPS_SCRIPT_URL)
@@ -674,14 +711,20 @@ class GSEWorkOrderCreator:
         except Exception as e:
             logger.exception(f"[GSE Creator] Failed to save local W/O history: {e}")
 
+        # Rule: Exclude PM / Scheduled work orders from sheet บันทึกข้อมูล W/O (Master Log Sheet is strictly for CM/Unscheduled)
+        cm_items = [r for r in results if (r.get("priority") or "").upper() not in ("SCHED", "PM")]
+        if not cm_items:
+            logger.info("[GSE Creator] No CM items to send to Master Log Sheet (PM items excluded from บันทึกข้อมูล W/O).")
+            return True
+
         try:
             log_id = os.getenv("LOG_SPREADSHEET_ID", Config.LOG_SPREADSHEET_ID)
             payload = {
                 "action": "append_wo_log",
                 "target_spreadsheet_id": log_id,
-                "items": results
+                "items": cm_items
             }
-            logger.info(f"[GSE Creator] Logging {len(results)} W/O records to Master Log Sheet ({log_id})...")
+            logger.info(f"[GSE Creator] Logging {len(cm_items)} W/O records to Master Log Sheet ({log_id})...")
             resp = requests.post(url, json=payload, timeout=35)
             if resp.status_code == 200:
                 logger.info("[GSE Creator] Master W/O Log Sheet sync completed successfully!")
