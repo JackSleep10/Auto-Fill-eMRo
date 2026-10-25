@@ -407,11 +407,16 @@
             <span class="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
               <i class="fa-solid fa-circle-check"></i> สร้างใบงานสำเร็จเรียบร้อย!
             </span>
-            <button onclick="copyText(document.getElementById('adhocWoNumber').innerText)" class="text-xs px-2.5 py-1 bg-emerald-600/30 text-emerald-300 rounded border border-emerald-500/40 hover:bg-emerald-600/50">
+            <button id="adhocCopyBtn" onclick="copyText(document.getElementById('adhocWoNumber').innerText.trim(), this)" class="text-xs px-2.5 py-1 bg-emerald-600/30 text-emerald-300 rounded border border-emerald-500/40 hover:bg-emerald-600/50 transition flex items-center gap-1 font-medium cursor-pointer">
               <i class="fa-regular fa-copy"></i> คัดลอก
             </button>
           </div>
-          <div class="text-2xl font-mono font-bold text-white" id="adhocWoNumber">-</div>
+          <div class="text-2xl font-mono font-bold text-white cursor-pointer hover:text-emerald-300 transition flex items-center gap-2 group" id="adhocWoNumber" onclick="copyText(this.innerText.trim(), document.getElementById('adhocCopyBtn'))" title="คลิกเพื่อคัดลอกเลขใบงาน">
+            -
+            <span class="text-xs font-sans text-slate-400 group-hover:text-emerald-400 font-normal hidden group-hover:inline transition">
+              <i class="fa-regular fa-copy text-[11px]"></i> คลิกเพื่อคัดลอก
+            </span>
+          </div>
           <div class="text-xs text-slate-400 font-mono" id="adhocWoDetails">-</div>
         </div>
 
@@ -801,14 +806,7 @@
     function copyIpLink() {
       const ip = window.serverLanIp || '172.21.1.111';
       const link = `http://${ip}:8000`;
-      navigator.clipboard.writeText(link).then(() => {
-        const ipEl = document.getElementById('ipBadgeText');
-        const orig = ipEl ? ipEl.innerText : '';
-        if (ipEl) ipEl.innerText = 'คัดลอกแล้ว!';
-        setTimeout(() => { if (ipEl) ipEl.innerText = orig; }, 1800);
-      }).catch(() => {
-        prompt("คัดลอกลิงก์ IP สำหรับเปิดในเครื่องอื่น:", link);
-      });
+      copyText(link, document.getElementById('ipBadge'));
     }
 
     // Tab Navigation
@@ -1270,7 +1268,7 @@
               </span>
             </td>
             <td class="p-3 text-center whitespace-nowrap">
-              <button onclick="copyText('${r.wo_number}')" class="text-slate-400 hover:text-emerald-400 p-1">
+              <button onclick="copyText('${r.wo_number}', this)" class="text-slate-400 hover:text-emerald-400 p-1 cursor-pointer transition" title="คัดลอกเลขใบงาน">
                 <i class="fa-regular fa-copy"></i>
               </button>
             </td>
@@ -1302,7 +1300,7 @@
               </div>
             </div>
             ${r.wo_number ? `
-            <button onclick="copyText('${r.wo_number}')" class="w-full py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 hover:border-transparent transition text-xs font-semibold flex items-center justify-center gap-1.5">
+            <button onclick="copyText('${r.wo_number}', this)" class="w-full py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 hover:border-transparent transition text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer">
               <i class="fa-regular fa-copy"></i> คัดลอกเลข W/O
             </button>
             ` : ''}
@@ -1906,7 +1904,7 @@
             <td class="p-2.5 text-center text-slate-400 text-xs whitespace-nowrap">${escapeHtml(dateStr)}</td>
             <td class="p-2.5 text-center">${typeBadge}</td>
             <td class="p-2.5 font-bold text-white text-xs">
-              <span class="cursor-pointer hover:text-emerald-400 transition" onclick="copyText('${woNum}')" title="คลิกเพื่อคัดลอก">
+              <span class="cursor-pointer hover:text-emerald-400 transition" onclick="copyText('${woNum}', this)" title="คลิกเพื่อคัดลอก">
                 ${escapeHtml(woNum)} <i class="fa-regular fa-copy text-[10px] text-slate-500 hover:text-white ml-0.5"></i>
               </span>
             </td>
@@ -1964,7 +1962,7 @@
               <div class="text-[11px] text-slate-400">เลขที่ใบงาน (W/O):</div>
               <div class="text-base font-bold font-mono text-white flex items-center justify-between">
                 <span>${escapeHtml(woNum)}</span>
-                <button type="button" onclick="copyText('${woNum}')" class="text-xs text-slate-400 hover:text-white px-2 py-0.5 bg-slate-800 rounded transition">
+                <button type="button" onclick="copyText('${woNum}', this)" class="text-xs text-slate-400 hover:text-white px-2 py-0.5 bg-slate-800 rounded transition cursor-pointer" title="คลิกเพื่อคัดลอก">
                   <i class="fa-regular fa-copy"></i>
                 </button>
               </div>
@@ -2038,18 +2036,114 @@
         alert("ไม่มีเลข W/O ในรายการ");
         return;
       }
-      navigator.clipboard.writeText(numbers.join('\n')).then(() => {
-        alert(`คัดลอกเลข W/O ทั้งหมด ${numbers.length} รายการ เรียบร้อยแล้ว!`);
-      });
+      copyText(numbers.join('\n'));
+      showCopyToast(`คัดลอกเลข W/O ทั้งหมด ${numbers.length} รายการแล้ว`);
     }
 
     // Utilities
-    function copyText(text) {
-      navigator.clipboard.writeText(text);
+    async function copyText(text, btnElement = null) {
+      if (!text || text === '-' || text === 'None') return;
+      text = String(text).trim();
+
+      // Automatically find triggering element if not provided
+      let target = btnElement;
+      if (!target && typeof window !== 'undefined' && window.event) {
+        target = window.event.currentTarget || window.event.target;
+        if (target && target.closest) {
+          target = target.closest('button') || target.closest('span') || target;
+        }
+      }
+
+      let copied = false;
+
+      // 1. Try modern navigator.clipboard if in secure context (HTTPS / localhost)
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        } catch (e) {
+          console.warn('navigator.clipboard failed:', e);
+        }
+      }
+
+      // 2. Fallback to execCommand('copy') for HTTP / LAN IP contexts (http://172.21.1.111:8000)
+      if (!copied) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          ta.style.top = '-9999px';
+          ta.style.opacity = '0';
+          ta.setAttribute('readonly', '');
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          ta.setSelectionRange(0, 99999);
+          copied = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch (err) {
+          console.warn('execCommand copy failed:', err);
+        }
+      }
+
+      // 3. Ultimate prompt fallback if browser blocks both
+      if (!copied) {
+        window.prompt('กด Ctrl+C เพื่อคัดลอก:', text);
+        copied = true;
+      }
+
+      // 4. Instant Visual Button Feedback
+      if (target) {
+        if (!target.dataset.origHtml) {
+          target.dataset.origHtml = target.innerHTML;
+        }
+        const origHtml = target.dataset.origHtml;
+        const origClasses = target.className;
+
+        const hasLabel = target.textContent && target.textContent.trim().length > 1;
+        target.innerHTML = hasLabel 
+          ? `<i class="fa-solid fa-check text-emerald-300"></i> คัดลอกแล้ว!` 
+          : `<i class="fa-solid fa-check text-emerald-300"></i>`;
+        
+        target.classList.add('bg-emerald-600', 'text-white', 'ring-2', 'ring-emerald-400/50');
+        target.classList.remove('bg-emerald-600/30', 'text-emerald-300', 'bg-slate-800', 'text-slate-400');
+
+        setTimeout(() => {
+          target.innerHTML = origHtml;
+          target.className = origClasses;
+        }, 1800);
+      }
+
+      // 5. Global Toast Notification
+      showCopyToast(text);
+    }
+
+    function showCopyToast(text) {
+      let toast = document.getElementById('globalCopyToast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'globalCopyToast';
+        toast.className = 'fixed bottom-5 right-5 z-50 bg-slate-900/95 border border-emerald-500/50 text-white text-xs px-4 py-2.5 rounded-xl shadow-2xl shadow-emerald-500/20 backdrop-blur-md flex items-center gap-2 transform transition-all duration-300 opacity-0 translate-y-3 pointer-events-none';
+        document.body.appendChild(toast);
+      }
+
+      const display = text.length > 35 ? text.substring(0, 32) + '...' : text;
+      toast.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 text-sm"></i> <span>คัดลอก <b>${escapeHtml(display)}</b> สำเร็จ!</span>`;
+
+      toast.classList.remove('opacity-0', 'translate-y-3', 'pointer-events-none');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-3', 'pointer-events-none');
+      }, 2200);
     }
 
     function escapeHtml(str) {
-      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      if (str === null || str === undefined) return '';
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
   </script>
 </body>

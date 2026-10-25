@@ -314,3 +314,33 @@
 4. **ทดสอบเปิดใบงานจริง:**
    - ทดสอบเปิดใบงาน Ad-Hoc CM ให้กับรถ **`TLM-BU-027`** (อาการ: `WATER PUMP LEAKING.`, ผู้เปิด: `TL248006`)
    - **สำเร็จสมบูรณ์ 100%!** ได้รับเลขที่ใบงาน **W/O #`2362438`** (S/N: `YS4K4X20001842240`) บันทึกลงระบบประวัติเรียบร้อย
+
+
+---
+
+## 📋 2026-10-25 — Universal Clipboard Copy & Instant Visual Feedback Fix
+
+**ปัญหาที่พบ:**
+1. ผู้ใช้งานกดปุ่ม **"📋 คัดลอก"** บนการ์ดแสดงผลใบงาน Ad-Hoc W/O (เช่น ใบงาน #`2362441` ของรถ `TLM-BU-010`) แต่ระบบไม่คัดลอกข้อความให้ ต้องลากเมาส์ครอบตัวเลขเอง
+2. **สาเหตุทางเทคนิค (Root Cause):**
+   - เมื่อเข้าใช้งานผ่าน LAN IP เครือข่ายภายใน (`http://172.21.1.111:8000`) การเชื่อมต่อเป็น HTTP ธรรมดา (Non-Secure Context: `window.isSecureContext === false`)
+   - เว็บบราวเซอร์สมัยใหม่ (Chrome, Edge, Firefox, Safari) จะไม่อนุญาตให้เรียกใช้งาน `navigator.clipboard` ใน Non-Secure Context โดยอ็อบเจกต์ `navigator.clipboard` จะมีค่าเป็น `undefined`
+   - โค้ดเดิมใน `data/gse_dashboard.html` เรียก `navigator.clipboard.writeText(text)` ตรงๆ โดยไม่มี Fallback ทำให้เกิดข้อผิดพลาดเงียบ `TypeError: Cannot read properties of undefined (reading 'writeText')` และปุ่มไม่มีการเปลี่ยนสถานะหรือแสดง Feedback ใดๆ
+
+**การแก้ไขที่ดำเนินการ:**
+1. **ปรับปรุงฟังก์ชัน `copyText(text, btnElement)` ให้เป็น Universal Clipboard:**
+   - **ชั้นที่ 1 (Secure Context):** หากใช้งานผ่าน `https://` (Cloudflare) หรือ `localhost` จะใช้ `navigator.clipboard.writeText` ตามมาตรฐานความเร็วสูง
+   - **ชั้นที่ 2 (Non-Secure HTTP Fallback):** หากใช้งานผ่าน LAN IP (`http://172.21.1.111:8000`) หรือบราวเซอร์บล็อก Clipboard API จะ Fallback ไปใช้เทคนิคจำลอง Hidden `<textarea>` + `document.execCommand('copy')` โดยอัตโนมัติ 100%
+   - **ชั้นที่ 3 (Ultimate Fallback):** หากเครื่องหรือสิทธิ์ความปลอดภัยปิดกั้นทั้งสองแบบ จะเปิด Dialog `window.prompt("กด Ctrl+C เพื่อคัดลอก:")` ให้ทันที
+2. **เพิ่มระบบตอบสนองทันทีบนปุ่ม (Button Feedback):**
+   - เมื่อกดคัดลอก ปุ่มจะเปลี่ยนเป็นสีเขียวมรกตและแสดงข้อความ `คัดลอกแล้ว! ✅` นาน 1.8 วินาที ก่อนกลับเป็นปุ่มเดิม
+3. **เพิ่ม Floating Toast Notification (`#globalCopyToast`):**
+   - ปรากฏข้อความลอยมุมขวาล่างอย่างสวยงาม เช่น `คัดลอก 2362441 สำเร็จ!` พร้อมอนิเมชัน Fade-in / Fade-out นุ่มนวล
+4. **เปิดให้คลิกคัดลอกที่ตัวเลข W/O ได้โดยตรง (Direct Click-to-Copy):**
+   - ตัวเลข W/O ขนาดใหญ่ในหน้าผลลัพธ์สามารถกดคลิกที่ตัวเลขเพื่อคัดลอกได้ทันทีเช่นกัน (Cursor เป็น Pointer พร้อม Tooltip แจ้งเตือน)
+5. **อัปเกรดปุ่มคัดลอกทุกจุดในระบบ:**
+   - หน้าการ์ดสร้างใบงาน Ad-Hoc CM
+   - ตารางและ Mobile Card ในแท็บผลลัพธ์ (Results & Sync)
+   - ปุ่มคัดลอกเลขใบงานทั้งหมด (Copy All W/O)
+   - ตารางและ Mobile Card ในแท็บประวัติ (History)
+   - แถบ Badge IP ด้านบน (Header IP Badge)
