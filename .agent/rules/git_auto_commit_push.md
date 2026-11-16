@@ -1,0 +1,5 @@
+# Git Auto Commit & Push Rule
+
+- **Always Commit & Push Every Change**: ทุกครั้งที่มีการแก้ไขงาน ปรับปรุงโค้ด เพิ่มฟีเจอร์ หรือแก้ไขบั๊กในโปรเจกต์ `D:\Project dashboard` (`Auto-Fill-eMRo`) ต้องทำการ `git add`, `git commit` และ `git push` ขึ้น GitHub (`https://github.com/JackSleep10/Auto-Fill-eMRo.git` บน branch `main`) ตลอดเสมอ
+- **Verify Before Commit**: ตรวจสอบ `git status` และ `git diff` ให้แน่ใจว่าไม่มีไฟล์ความลับ (`.env`), ข้อมูล runtime หรือ cache ปะปนเข้าไป (ยึดตาม `.gitignore`)
+- **Clear Commit Messages**: เขียน commit message ให้สื่อความหมายของการแก้ไขอย่างชัดเจน และส่งคำสั่ง `git push origin main` หลัง commit เสร็จสิ้นทุกครั้ง

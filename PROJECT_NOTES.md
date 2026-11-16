@@ -32,9 +32,18 @@
    - **Monthly PM Tracking Sheet (`1luje0x1QX...`):** กำหนดสำหรับงาน **PM ตามรอบเดือนเท่านั้น** บันทึกเฉพาะงาน PM จากหน้าเปิดใบงานชุด (Batch PM) ห้ามนำรายการ CM (แจ้งซ่อมด่วน) ไปบันทึกปะปนเด็ดขาด
    - **Master W/O Log Sheet (`1BdMWDX9...`):** หรือ **sheet บันทึกข้อมูล W/O** สำหรับบันทึก **รายการแจ้งซ่อมด่วน (CM) เท่านั้น** โดยงานจากหน้าเปิดใบ PM หลายใบจะไม่ถูกนำมาลงใน Sheet นี้ เพื่อป้องกันไม่ให้ข้อมูลงาน PM รายเดือนไปปะปนกับบันทึกการแจ้งซ่อมด่วน
 
+7. **การบันทึกและอัปเดตโค้ดขึ้น GitHub อัตโนมัติ (Auto Commit & Push Rule)**
+   - ทุกครั้งที่มีการแก้ไขงาน ปรับปรุงฟีเจอร์ หรือแก้ไขบั๊กในระบบ ต้องทำการ `git add`, `git commit` และ `git push` ขึ้น GitHub Repository (`https://github.com/JackSleep10/Auto-Fill-eMRo.git` บน branch `main`) เสมอ
+
 ---
 
 ## 📜 2. ประวัติการแก้ไขและเหตุการณ์สำคัญ (Changelog & Incident History)
+
+### [2026-11-16] Smart PM Description Parser, Export Excel 3 คอลัมน์ และกฎ Auto Commit & Push
+- **การปรับปรุงระบบ:**
+  1. **Smart PM Description Parser (`data/gse_dashboard.html`, `web_app.py`):** รองรับการวางรายการแบบเว้นวรรค/Tab/Comma/Semicolon และแปลงตัวย่อชุดตรวจเช็คอัตโนมัติ (เช่น `TLM-AC-003 A` ➜ GSE: `TLM-AC-003`, Description: `PM A`) พร้อมช่องแก้ไข Description แบบ inline ในตารางคิว
+  2. **Export W/O Results เป็น Excel (`web_app.py`, `data/gse_dashboard.html`):** เพิ่ม Endpoint `/api/export-results-excel` และปุ่ม `Export เป็น Excel` / `คัดลอก (GSE + PM + W/O)` จัดเรียงคอลัมน์ `GSE NO.`, `DESCRIPTION`, `GSE W/O NO.`
+  3. **กฎ Git Auto Commit & Push:** บันทึกกฎบังคับให้ทำการ `git commit` และ `git push` ขึ้น GitHub (`origin/main`) ทุกครั้งหลังแก้ไขงานไว้ใน `.agent/rules/git_auto_commit_push.md`, `GEMINI.md` และ `PROJECT_NOTES.md`
 
 ### [2026-10-20] ปรับปรุงหน้าเปิดใบ PM หลายใบไม่บันทึกลง Sheet บันทึกข้อมูล W/O
 - **ความต้องการของผู้ใช้:**
