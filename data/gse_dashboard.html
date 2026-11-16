@@ -168,9 +168,9 @@
               <label class="text-xs font-semibold uppercase tracking-wider text-slate-400">
                 <i class="fa-solid fa-paste text-amber-400 mr-1"></i> วางรายการจาก Excel / Sheets
               </label>
-              <span class="text-xs text-slate-500">1 คอลัมน์ หรือ 2 คอลัมน์</span>
+              <span class="text-xs text-slate-400 font-sans">1 หรือ 2 คอลัมน์ (รหัส + ชุด PM)</span>
             </div>
-            <textarea id="pasteBox" rows="6" placeholder="ก๊อปปี้คอลัมน์รหัสอุปกรณ์มาวางที่นี่ได้เลย เช่น:&#10;TLM-TB-048&#10;TLM-TB-049&#10;TLM-FL-001&#10;TLM-GP-007"
+            <textarea id="pasteBox" rows="6" placeholder="วางรหัสอุปกรณ์ หรือวางพร้อมชุด PM ได้ เช่น:&#10;TLM-AC-003 A&#10;TLM-BU-008 B&#10;TLM-BU-009 PM A&#10;TLM-TR-054&#10;(ระบบจะแปลง A -> PM A ให้อัตโนมัติ รองรับทั้งวรรค, Tab, หรือ Comma)"
                       class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-white focus:outline-none focus:border-rose-500 custom-scrollbar uppercase"></textarea>
             
             <div class="flex gap-2">
@@ -441,8 +441,14 @@
             <button onclick="retryFailedItems()" id="retryFailedBtn" class="hidden flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/20">
               <i class="fa-solid fa-arrows-rotate"></i> นำรายการที่ไม่สำเร็จกลับเข้าคิว (<span id="failedCountBadge">0</span>)
             </button>
-            <button onclick="copyAllWoNumbers()" class="flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20">
-              <i class="fa-regular fa-copy"></i> คัดลอกเลข W/O ทั้งหมด
+            <button onclick="exportResultsExcel()" class="flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20" title="ดาวน์โหลดผลลัพธ์เป็นไฟล์ Excel (.xlsx)">
+              <i class="fa-solid fa-file-excel"></i> Export เป็น Excel
+            </button>
+            <button onclick="copyGsePmWoResults()" class="flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center justify-center gap-1.5" title="คัดลอก 3 คอลัมน์ (GSE, PM, W/O) สำหรับวางลงใน Excel ทันที">
+              <i class="fa-solid fa-paste text-amber-400"></i> คัดลอก (GSE + PM + W/O)
+            </button>
+            <button onclick="copyAllWoNumbers()" class="flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center justify-center gap-1.5">
+              <i class="fa-regular fa-copy"></i> คัดลอกเฉพาะเลข W/O
             </button>
             <button onclick="syncToSheetsNow()" class="flex-1 sm:flex-none px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center justify-center gap-1.5">
               <i class="fa-solid fa-cloud-arrow-up text-sky-400"></i> ส่งเข้า Google Sheets
@@ -894,7 +900,51 @@
       }
     }
 
-    // Parse and Add from Paste Box
+    // Helper to find matching GSE in Master List (supports AC-003 -> TLM-AC-003)
+    function findMasterGse(gseCode) {
+      if (!gseCode) return null;
+      const clean = gseCode.trim().toUpperCase().replace(/^["']|["']$/g, '');
+      let match = allMasterList.find(m => m.gse.toUpperCase() === clean);
+      if (match) return match;
+      if (!clean.startsWith('TLM-')) {
+        match = allMasterList.find(m => m.gse.toUpperCase() === 'TLM-' + clean);
+        if (match) return match;
+      }
+      return null;
+    }
+
+    // Helper to format PM Description (e.g. 'A' -> 'PM A', 'PMA' -> 'PM A', 'OCT' -> 'PM OCT')
+    function formatPmDescription(desc, defaultCycle) {
+      let d = (desc || '').trim().toUpperCase();
+      if (!d) return (defaultCycle || 'PM').trim().toUpperCase();
+
+      // If single letter A, B, C, D, E, F -> PM A, PM B...
+      if (/^[A-Z]$/.test(d)) {
+        return `PM ${d}`;
+      }
+
+      // If PMA, PMB, PMC or PM-A, PM_B -> PM A, PM B, PM C
+      const pmm = d.match(/^PM[-_ ]?([A-Z])$/);
+      if (pmm) {
+        return `PM ${pmm[1]}`;
+      }
+
+      // If 3-letter month: OCT, NOV, DEC, JAN... -> PM OCT
+      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      if (months.includes(d)) {
+        return `PM ${d}`;
+      }
+
+      // If PMOCT, PM-OCT -> PM OCT
+      const pmMonth = d.match(/^PM[-_ ]?([A-Z]{3,4})$/);
+      if (pmMonth && months.includes(pmMonth[1])) {
+        return `PM ${pmMonth[1]}`;
+      }
+
+      return d;
+    }
+
+    // Parse and Add from Paste Box (supports Space, Tab, Comma, Semicolon)
     function parseAndAddPaste() {
       const text = document.getElementById('pasteBox').value.trim();
       if (!text) return;
@@ -904,19 +954,54 @@
       let count = 0;
 
       lines.forEach(line => {
-        const raw = line.trim();
+        let raw = line.trim();
         if (!raw) return;
 
-        // Support Tab separated: GSE [TAB] Description
-        const parts = raw.split(/\t+/);
-        let gse = parts[0].trim().toUpperCase();
-        let desc = parts.length > 1 ? parts[1].trim().toUpperCase() : defaultCycle;
+        // Strip outer quotes if line was quoted
+        raw = raw.replace(/^["']|["']$/g, '').trim();
 
-        // Strip prefixes if user pasted whole row or extra punctuation
-        gse = gse.replace(/^["']|["']$/g, '');
+        let parts = [];
+        if (raw.includes('\t')) {
+          parts = raw.split(/\t+/).map(p => p.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+        } else if (raw.includes(',') && !raw.includes('\t')) {
+          parts = raw.split(/,+/).map(p => p.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+        } else if (raw.includes(';') && !raw.includes('\t')) {
+          parts = raw.split(/;+/).map(p => p.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+        } else if (raw.includes('|')) {
+          parts = raw.split(/\|+/).map(p => p.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+        } else {
+          // Space separated: e.g. "TLM-AC-003 PM A" or "1 TLM-AC-003 PM A"
+          const tokens = raw.split(/\s+/).map(t => t.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+          if (tokens.length >= 2 && (/^\d+$/.test(tokens[0]) || tokens[0] === '#')) {
+            parts = [tokens[1], tokens.slice(2).join(' ')];
+          } else if (tokens.length >= 2) {
+            parts = [tokens[0], tokens.slice(1).join(' ')];
+          } else {
+            parts = [raw];
+          }
+        }
 
-        if (gse) {
-          addToQueue(gse, desc, 'SCHED');
+        if (!parts || parts.length === 0) return;
+
+        let gseCandidate = parts[0].trim().toUpperCase();
+        let descCandidate = '';
+
+        if ((/^\d+$/.test(gseCandidate) || gseCandidate === '#') && parts.length > 1) {
+          gseCandidate = parts[1].trim().toUpperCase();
+          descCandidate = parts.slice(2).join(' ').trim().toUpperCase();
+        } else {
+          const matched = findMasterGse(gseCandidate);
+          // If 3 columns and middle column is Type (e.g. TLM-AC-003 | ACU | PM A)
+          if (parts.length >= 3 && matched && matched.type && parts[1].toUpperCase() === matched.type.toUpperCase()) {
+            descCandidate = parts.slice(2).join(' ').trim().toUpperCase();
+          } else {
+            descCandidate = parts.slice(1).join(' ').trim().toUpperCase();
+          }
+        }
+
+        const finalDesc = formatPmDescription(descCandidate, defaultCycle);
+        if (gseCandidate) {
+          addToQueue(gseCandidate, finalDesc, 'SCHED');
           count++;
         }
       });
@@ -968,16 +1053,27 @@
     }
 
     function addToQueue(gse, description, priority = 'SCHED') {
-      // Find info from master list
-      const info = allMasterList.find(m => m.gse.toUpperCase() === gse.toUpperCase()) || {};
+      const match = findMasterGse(gse);
+      const canonicalGse = match ? match.gse : gse.toUpperCase().trim();
+      const info = match || {};
+      const formattedDesc = formatPmDescription(description, 'PM');
       queueItems.push({
-        gse: gse.toUpperCase(),
-        description: description,
+        gse: canonicalGse,
+        description: formattedDesc,
         priority: priority,
         type: info.type || '-',
         engine: info.engine || '-',
         emro_status: info.emro_status || 'ACTIVE'
       });
+    }
+
+    function updateQueueItemDesc(index, val) {
+      if (queueItems[index]) {
+        const formatted = formatPmDescription(val, 'PM');
+        queueItems[index].description = formatted;
+        return formatted;
+      }
+      return val;
     }
 
     function removeQueueItem(index) {
@@ -1062,7 +1158,13 @@
                   ${item.type} • ${item.engine}
                 </span>
               </td>
-              <td class="p-3 text-slate-200 whitespace-nowrap font-mono">${item.description}</td>
+              <td class="p-2 whitespace-nowrap font-mono">
+                <input type="text" value="${item.description || ''}" 
+                       oninput="updateQueueItemDesc(${idx}, this.value)"
+                       onchange="this.value = updateQueueItemDesc(${idx}, this.value)"
+                       placeholder="ระบุ DESCRIPTION"
+                       class="bg-slate-950/80 border border-slate-700/80 focus:border-rose-500 focus:bg-slate-900 rounded-lg px-2.5 py-1 text-xs text-white font-mono w-36 uppercase transition">
+              </td>
               <td class="p-3 text-center whitespace-nowrap">
                 <button onclick="removeQueueItem(${idx})" class="text-slate-500 hover:text-rose-400 transition p-1">
                   <i class="fa-solid fa-xmark"></i>
@@ -1095,7 +1197,14 @@
               <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
                 <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">${item.type}</span>
                 <span class="px-1.5 py-0.5 rounded border text-[10px] ${engineBadge}">${item.engine}</span>
-                <span class="text-slate-300 font-mono bg-slate-800/80 px-2 py-0.5 rounded">📝 ${item.description}</span>
+              </div>
+              <div class="mt-2 flex items-center gap-2">
+                <span class="text-[11px] text-slate-400 font-sans">Description:</span>
+                <input type="text" value="${item.description || ''}" 
+                       oninput="updateQueueItemDesc(${idx}, this.value)"
+                       onchange="this.value = updateQueueItemDesc(${idx}, this.value)"
+                       placeholder="ระบุ DESCRIPTION"
+                       class="bg-slate-900 border border-slate-700 focus:border-rose-500 rounded px-2.5 py-0.5 text-xs text-white font-mono flex-1 uppercase transition">
               </div>
             </div>
             <button onclick="removeQueueItem(${idx})" class="p-2.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 transition flex-shrink-0" title="ลบรายการนี้">
@@ -1325,6 +1434,78 @@
       renderQueue();
       switchTab('batch');
       alert(`นำรายการที่ไม่สำเร็จจำนวน ${count} รายการกลับเข้าสู่คิวเปิดใบงานเรียบร้อยแล้ว!\nสามารถตรวจสอบในแท็บ 'เปิดใบงานแบบกลุ่ม (Batch W/O)' แล้วกดเริ่มเปิดใบงานได้ทันที`);
+    }
+
+    // Export Results as Excel (.xlsx) with order: GSE NO., DESCRIPTION, GSE W/O NO.
+    async function exportResultsExcel() {
+      const items = (completedResults && completedResults.length > 0)
+        ? completedResults.filter(r => r.wo_number)
+        : [];
+
+      if (items.length === 0) {
+        alert('ยังไม่มีรายการผลลัพธ์ W/O สำหรับส่งออก');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/export-results-excel', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ items: items })
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const d = new Date();
+          const pad = n => String(n).padStart(2, '0');
+          const dateStr = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+          a.download = `GSE_WO_Results_${dateStr}.xlsx`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+          return;
+        }
+      } catch (err) {
+        console.warn('Backend excel export error, using browser fallback:', err);
+      }
+
+      // Fallback: Client-side Excel TSV with BOM (Opens in Excel natively)
+      let tsv = '\uFEFFGSE NO.\tDESCRIPTION\tGSE W/O NO.\tGSE S/N\tPRIORITY\n';
+      items.forEach(r => {
+        tsv += `${r.gse || ''}\t${r.description || 'PM'}\t${r.wo_number || ''}\t${r.sn || ''}\t${r.priority || 'SCHED'}\n`;
+      });
+      const blob = new Blob([tsv], { type: 'application/vnd.ms-excel;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `GSE_WO_Results_${new Date().toISOString().slice(0, 10)}.xls`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    }
+
+    // Copy 3 Columns for Direct Excel Pasting: GSE NO. [TAB] DESCRIPTION [TAB] W/O NO.
+    function copyGsePmWoResults() {
+      const items = (completedResults && completedResults.length > 0)
+        ? completedResults.filter(r => r.wo_number)
+        : [];
+
+      if (items.length === 0) {
+        alert('ยังไม่มีรายการผลลัพธ์ W/O สำหรับคัดลอก');
+        return;
+      }
+
+      // Format: TLM-BU-021 \t PM A \t 2364462
+      const text = items
+        .map(r => `${r.gse}\t${r.description || 'PM'}\t${r.wo_number}`)
+        .join('\n');
+
+      copyText(text);
+      alert(`✓ คัดลอกข้อมูลเรียง 3 คอลัมน์สำเร็จ ${items.length} รายการ!\n(คอลัมน์: รหัส GSE  |  รอบ PM  |  เลข W/O)\nสามารถกด Ctrl+V วางลงในตาราง Excel ได้ทันที`);
     }
 
     // Copy All W/O Numbers

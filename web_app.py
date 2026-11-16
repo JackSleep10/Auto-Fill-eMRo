@@ -1,8 +1,26 @@
+import os
+import sys
+
+# Ensure stdout/stderr and logging are fully safe under pythonw.exe
+_devnull = open(os.devnull, "w", encoding="utf-8")
+if sys.stdout is None:
+    sys.stdout = _devnull
+if sys.stderr is None:
+    sys.stderr = _devnull
+if sys.__stdout__ is None:
+    sys.__stdout__ = _devnull
+if sys.__stderr__ is None:
+    sys.__stderr__ = _devnull
+
+import logging
+logging.lastResort = None
+
 import asyncio
 import csv
+import io
 import json
 import logging
-import os
+import re
 import socket
 import threading
 from datetime import datetime
@@ -20,8 +38,7 @@ _LOG_DIR = Config.BASE_DIR / "data" / "logs"
 _LOG_DIR.mkdir(parents=True, exist_ok=True)
 _file_handler = RotatingFileHandler(_LOG_DIR / "web_app.log", maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8")
 _file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logging.getLogger().addHandler(_file_handler)
+logging.basicConfig(level=logging.INFO, handlers=[_file_handler])
 logger = logging.getLogger("GSEWebApp")
 
 # Work from the project folder regardless of where the app was launched from
@@ -100,6 +117,24 @@ def sync_master_from_google_sheet():
     except Exception as e:
         logger.exception("Error syncing master sheet from Google")
         return False, str(e)
+
+PM_MONTHS = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"}
+
+def format_pm_description(desc: str, default: str = "PM") -> str:
+    d = (desc or "").strip().upper()
+    if not d:
+        return default
+    if re.match(r"^[A-Z]$", d):
+        return f"PM {d}"
+    pmm = re.match(r"^PM[-_ ]?([A-Z])$", d)
+    if pmm:
+        return f"PM {pmm.group(1)}"
+    if d in PM_MONTHS:
+        return f"PM {d}"
+    pm_m = re.match(r"^PM[-_ ]?([A-Z]{3,4})$", d)
+    if pm_m and pm_m.group(1) in PM_MONTHS:
+        return f"PM {pm_m.group(1)}"
+    return d
 
 # Helper to persist batch results across app restarts
 RESULTS_FILE = Path("data/last_batch_results.json")
@@ -219,12 +254,30 @@ def run_batch_thread(items, user: str):
         try:
             for idx, itm in enumerate(items):
                 BATCH_STATE["current_index"] = idx + 1
-                BATCH_STATE["current_gse"] = itm["gse"]
-                log_batch(f"Creating W/O ({idx+1}/{len(items)}): GSE {itm['gse']} | {itm['description']} ({itm.get('priority', 'SCHED')})...")
+                gse_val = str(itm.get("gse", "")).strip().upper()
+                desc_val = str(itm.get("description", "")).strip().upper()
+
+                # Defensive parsing: if gse contains space e.g. "TLM-AC-003 PM A" or "TLM-AC-003 A"
+                if " " in gse_val:
+                    parts = gse_val.split(None, 1)
+                    gse_val = parts[0].strip().upper()
+                    if not desc_val or desc_val == "PM":
+                        desc_val = parts[1].strip().upper()
+
+                # Format single-letter or PM descriptions (e.g. 'A' -> 'PM A')
+                desc_val = format_pm_description(desc_val, "PM")
+
+                # Auto-resolve TLM- prefix
+                if not gse_val.startswith("TLM-"):
+                    if any(isinstance(m, dict) and m.get("gse") == f"TLM-{gse_val}" for m in GSE_MASTER):
+                        gse_val = f"TLM-{gse_val}"
+
+                BATCH_STATE["current_gse"] = gse_val
+                log_batch(f"Creating W/O ({idx+1}/{len(items)}): GSE {gse_val} | {desc_val} ({itm.get('priority', 'SCHED')})...")
 
                 res = await creator.create_single_wo(
-                    gse=itm["gse"],
-                    description=itm["description"],
+                    gse=gse_val,
+                    description=desc_val,
                     priority=itm.get("priority", "SCHED"),
                     user=user
                 )
@@ -386,6 +439,87 @@ def batch_status():
         BATCH_STATE["results"] = load_saved_results()
     return jsonify(BATCH_STATE)
 
+@app.route("/api/export-results-excel", methods=["GET", "POST"])
+def export_results_excel():
+    try:
+        items = None
+        if request.method == "POST":
+            data = request.get_json(silent=True) or {}
+            items = data.get("items")
+        if not items:
+            items = load_saved_results()
+
+        valid_items = [it for it in items if it.get("wo_number")] or items
+        if not valid_items:
+            return jsonify({"error": "No items to export"}), 400
+
+        import openpyxl
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "GSE WO Results"
+        ws.views.sheetView[0].showGridLines = True
+
+        header_fill = PatternFill(start_color="D71920", end_color="D71920", fill_type="solid")
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        data_font = Font(name="Calibri", size=10)
+        center_align = Alignment(horizontal="center", vertical="center")
+
+        thin_border = Border(
+            left=Side(style="thin", color="D1D5DB"),
+            right=Side(style="thin", color="D1D5DB"),
+            top=Side(style="thin", color="D1D5DB"),
+            bottom=Side(style="thin", color="D1D5DB"),
+        )
+
+        headers = ["GSE NO.", "DESCRIPTION", "GSE W/O NO.", "GSE S/N", "PRIORITY"]
+        ws.append(headers)
+
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center_align
+            cell.border = thin_border
+        ws.row_dimensions[1].height = 24
+
+        for r_idx, itm in enumerate(valid_items, start=2):
+            row_data = [
+                str(itm.get("gse", "")).strip(),
+                str(itm.get("description", "")).strip(),
+                str(itm.get("wo_number", "")).strip(),
+                str(itm.get("sn", "")).strip(),
+                str(itm.get("priority", "SCHED")).strip()
+            ]
+            ws.append(row_data)
+            ws.row_dimensions[r_idx].height = 20
+            for c_idx in range(1, len(row_data) + 1):
+                cell = ws.cell(row=r_idx, column=c_idx)
+                cell.font = data_font
+                cell.border = thin_border
+                cell.alignment = center_align
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            col_letter = col[0].column_letter
+            ws.column_dimensions[col_letter].width = max(max_len + 5, 14)
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+
+        filename = f"GSE_WO_Results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        return send_file(
+            bio,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except Exception as e:
+        logger.exception("Error exporting results to Excel")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/live-screenshot")
 def live_screenshot():
     shot_path = Path("data/screenshots/live_screen.jpg")
@@ -396,10 +530,25 @@ def live_screenshot():
 @app.route("/api/create-single", methods=["POST"])
 def create_single():
     data = request.get_json() or {}
-    gse = data.get("gse", "").strip()
-    desc = data.get("description", "").strip()
+    gse = data.get("gse", "").strip().upper()
+    desc = data.get("description", "").strip().upper()
     prio = data.get("priority", "UNSCHED").strip()
     current_user = session.get("user", "")
+
+    # Defensive parsing: if gse contains space e.g. "TLM-AC-003 PM A" or "TLM-AC-003 A"
+    if " " in gse:
+        parts = gse.split(None, 1)
+        gse = parts[0].strip().upper()
+        if not desc or desc == "PM":
+            desc = parts[1].strip().upper()
+
+    # Format single-letter or PM descriptions (e.g. 'A' -> 'PM A')
+    desc = format_pm_description(desc, "PM")
+
+    # Auto-resolve TLM- prefix
+    if not gse.startswith("TLM-"):
+        if any(isinstance(m, dict) and m.get("gse") == f"TLM-{gse}" for m in GSE_MASTER):
+            gse = f"TLM-{gse}"
 
     if not Config.has_emro_account(current_user):
         return jsonify({
@@ -543,6 +692,14 @@ def get_work_order_history():
     })
 
 if __name__ == "__main__":
+    import sys
+    if sys.stdout is None or sys.stderr is None:
+        log_out = open(_LOG_DIR / "stdout.log", "a", encoding="utf-8", buffering=1)
+        if sys.stdout is None:
+            sys.stdout = log_out
+        if sys.stderr is None:
+            sys.stderr = log_out
+
     port = int(os.environ.get("PORT", 8000))
     pid_file = Config.BASE_DIR / "data" / "web_app.pid"
     pid_file.write_text(str(os.getpid()), encoding="utf-8")
