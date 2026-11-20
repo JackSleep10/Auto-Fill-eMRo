@@ -1003,7 +1003,7 @@
       <div class="px-5 py-4 border-b border-zinc-800/80 flex items-start justify-between gap-3 bg-[#09090B]">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
-            <h3 class="text-base font-semibold font-mono text-zinc-100 truncate" id="invModalTitle">-</h3>
+            <h2 class="text-[15px] font-semibold font-mono text-zinc-100 truncate" id="invModalTitle">-</h2>
             <span id="invModalTypeBadge"></span>
           </div>
           <div class="flex items-center gap-2 mt-1 text-xs text-zinc-400 font-mono">
@@ -3054,7 +3054,7 @@
       if (body) {
         body.innerHTML = groups.map(group => `
           <section class="space-y-2">
-            <h4 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">${escapeHtml(group.title)}</h4>
+            <h3 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">${escapeHtml(group.title)}</h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               ${group.fields.map(([label, rawVal, copyable]) => {
                 const val = (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') ? String(rawVal) : '-';
