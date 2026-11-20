@@ -23,14 +23,19 @@ import logging
 import re
 import socket
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+import requests
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_file
 
 from scraper.config import Config
+from scraper.emro_scraper import eMROScraper
+from scraper.change_detector import ChangeDetector
 from scraper.gse_wo_creator import GSEWorkOrderCreator
 from scraper.history_store import append_history, load_history
+from sheets.google_sheets import GoogleSheetsClient
 
 from logging.handlers import RotatingFileHandler
 
@@ -69,7 +74,8 @@ VALID_USERS = {
 
 # Master list cache
 GSE_MASTER = []
-MASTER_CSV_PATH = Path("data/gse_master_list.csv")
+MASTER_CSV_PATH = Config.BASE_DIR / "data" / "gse_master_list.csv"
+_MASTER_LOCK = threading.Lock()
 
 def load_master_list():
     global GSE_MASTER
@@ -97,8 +103,6 @@ def load_master_list():
     GSE_MASTER = items
     logger.info(f"Loaded {len(GSE_MASTER)} items from GSE Master List.")
 
-load_master_list()
-
 def sync_master_from_google_sheet():
     global GSE_MASTER
     url = "https://docs.google.com/spreadsheets/d/1i0hjTtfuJZX5EVIDxKNGcj4zr4qy3xuZHar1NAeYsQ0/export?format=csv&gid=982490752"
@@ -106,6 +110,7 @@ def sync_master_from_google_sheet():
         import requests
         resp = requests.get(url, timeout=20)
         if resp.status_code == 200 and "GSE NO." in resp.text:
+            MASTER_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
             with open(MASTER_CSV_PATH, "w", encoding="utf-8") as f:
                 f.write(resp.text)
             load_master_list()
@@ -117,6 +122,21 @@ def sync_master_from_google_sheet():
     except Exception as e:
         logger.exception("Error syncing master sheet from Google")
         return False, str(e)
+
+def ensure_master_list():
+    """Ensure GSE_MASTER is populated; load from CSV or auto-sync from Google Sheets."""
+    if GSE_MASTER:
+        return
+    with _MASTER_LOCK:
+        if GSE_MASTER:
+            return
+        if MASTER_CSV_PATH.exists():
+            load_master_list()
+        if not GSE_MASTER:
+            logger.info("GSE Master List is missing or empty; auto-syncing from Google Sheets...")
+            sync_master_from_google_sheet()
+
+ensure_master_list()
 
 PM_MONTHS = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"}
 
@@ -394,6 +414,7 @@ def index():
 
 @app.route("/api/gse-master")
 def get_gse_master():
+    ensure_master_list()
     q = request.args.get("q", "").strip().lower()
     if not q:
         return jsonify(GSE_MASTER)
@@ -690,6 +711,469 @@ def get_work_order_history():
         "filtered_count": len(filtered),
         "items": filtered
     })
+
+# ==================== INVENTORY MONITOR API ====================
+INVENTORY_SNAPSHOT_FILE = Config.BASE_DIR / "data" / "inventory_snapshot.json"
+INVENTORY_CACHE_TTL_SECONDS = 30
+_INVENTORY_LOCK = threading.Lock()
+INVENTORY_STATE = {
+    "is_syncing": False,
+    "last_error": "",
+    "cache": None,
+    "cache_ts": 0.0,
+}
+
+INVENTORY_HEADER_TO_KEY = {
+    "Transaction NO": "transaction_no",
+    "Transaction Type": "transaction_type",
+    "P/N": "pn",
+    "S/N": "sn",
+    "Batch": "batch",
+    "GRB": "grb",
+    "Vendor Lot": "vendor_lot",
+    "Location": "location",
+    "Bin": "bin",
+    "Condition": "condition",
+    "QTY": "qty",
+    "Unit Cost": "unit_cost",
+    "Secondary Cost": "secondary_cost",
+    "CUR EXC Rate": "cur_exc_rate",
+    "A/C": "ac",
+    "W/O - S/O": "wo_so",
+    "Issued To": "issued_to",
+    "Issued To Name": "issued_to_name",
+    "Order Type": "order_type",
+    "Order NO": "order_no",
+    "Line": "order_line",
+    "Vendor/Customer": "vendor_customer",
+    "Vendor Name": "vendor_name",
+    "Reference": "reference",
+    "Status": "status",
+    "Created By": "created_by",
+    "Created Date": "created_date",
+    "Name": "created_name",
+    "G/L": "gl",
+    "Defect Description": "defect_description",
+    "Last Synced": "last_synced",
+}
+INVENTORY_CANONICAL_KEYS = list(INVENTORY_HEADER_TO_KEY.values())
+
+
+def _normalize_inventory_item(raw: dict, default_last_synced: str = "") -> dict:
+    item = {}
+    for key in INVENTORY_CANONICAL_KEYS:
+        val = raw.get(key, "") if isinstance(raw, dict) else ""
+        item[key] = "" if val is None else str(val)
+    if default_last_synced and not item.get("last_synced"):
+        item["last_synced"] = default_last_synced
+    return item
+
+
+def compute_inventory_stats(items: list, last_sync: str = "-") -> dict:
+    issued = 0
+    receiving = 0
+    transfer = 0
+    rts = 0
+    resolved_sync = (last_sync or "").strip()
+
+    for it in items or []:
+        t_type = str(it.get("transaction_type", "")).upper()
+        if "ISSUED" in t_type:
+            issued += 1
+        elif "RECEIVING" in t_type:
+            receiving += 1
+        elif "TRANSFER" in t_type or "RTS" in t_type:
+            transfer += 1
+        if "RTS" in t_type:
+            rts += 1
+        if (not resolved_sync or resolved_sync == "-") and it.get("last_synced"):
+            resolved_sync = str(it.get("last_synced")).strip()
+
+    return {
+        "total": len(items or []),
+        "issued": issued,
+        "receiving": receiving,
+        "transfer": transfer,
+        "rts": rts,
+        "last_sync": resolved_sync or "-",
+    }
+
+
+def rows_to_inventory_items(headers: list, rows: list) -> Optional[list]:
+    if not isinstance(headers, list) or not isinstance(rows, list):
+        return None
+    clean_headers = [str(h).strip() for h in headers]
+    if "Transaction Type" not in clean_headers or "P/N" not in clean_headers:
+        return None
+
+    col_keys = [INVENTORY_HEADER_TO_KEY.get(h) for h in clean_headers]
+    items = []
+    for row in rows:
+        if not isinstance(row, (list, tuple)):
+            continue
+        item = {k: "" for k in INVENTORY_CANONICAL_KEYS}
+        for idx, key in enumerate(col_keys):
+            if key and idx < len(row):
+                val = row[idx]
+                item[key] = "" if val is None else str(val)
+        items.append(item)
+    return items
+
+
+def save_inventory_snapshot(payload: dict):
+    try:
+        INVENTORY_SNAPSHOT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = INVENTORY_SNAPSHOT_FILE.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp_path, INVENTORY_SNAPSHOT_FILE)
+    except Exception as e:
+        logger.warning(f"Failed to save inventory snapshot: {e}")
+
+
+def load_inventory_fallback() -> dict:
+    if INVENTORY_SNAPSHOT_FILE.exists():
+        try:
+            snap = json.loads(INVENTORY_SNAPSHOT_FILE.read_text(encoding="utf-8"))
+            if isinstance(snap, dict) and isinstance(snap.get("items"), list):
+                items = [_normalize_inventory_item(it) for it in snap["items"]]
+                stats = compute_inventory_stats(items, last_sync=snap.get("last_sync", "-"))
+                return {
+                    "success": True,
+                    "source": "snapshot",
+                    "location": snap.get("location") or Config.MONITOR_LOCATION,
+                    "last_sync": stats["last_sync"],
+                    "stats": stats,
+                    "items": items,
+                    "logs": snap.get("logs", []) if isinstance(snap.get("logs"), list) else [],
+                }
+        except Exception as e:
+            logger.warning(f"Failed to read inventory snapshot: {e}")
+
+    if Config.CACHE_FILE.exists():
+        try:
+            raw_cache = json.loads(Config.CACHE_FILE.read_text(encoding="utf-8"))
+            if isinstance(raw_cache, list):
+                items = [_normalize_inventory_item(it) for it in raw_cache if isinstance(it, dict)]
+                stats = compute_inventory_stats(items)
+                return {
+                    "success": True,
+                    "source": "local_cache",
+                    "location": Config.MONITOR_LOCATION,
+                    "last_sync": stats["last_sync"],
+                    "stats": stats,
+                    "items": items,
+                    "logs": [],
+                }
+        except Exception as e:
+            logger.warning(f"Failed to read local inventory cache: {e}")
+
+    return {
+        "success": True,
+        "source": "empty",
+        "location": Config.MONITOR_LOCATION,
+        "last_sync": "-",
+        "stats": compute_inventory_stats([]),
+        "items": [],
+        "logs": [],
+    }
+
+
+def _get_inventory_webhook_url() -> str:
+    raw_url = (Config.APPS_SCRIPT_URL or "").strip()
+    if not raw_url:
+        return ""
+    if raw_url.startswith("http://") or raw_url.startswith("https://"):
+        return raw_url
+    return f"https://script.google.com/macros/s/{raw_url}/exec"
+
+
+def fetch_inventory_from_google_sheets() -> Optional[dict]:
+    webhook_url = _get_inventory_webhook_url()
+    if not webhook_url:
+        return None
+    try:
+        sep = "&" if "?" in webhook_url else "?"
+        resp = requests.get(f"{webhook_url}{sep}api=data", timeout=20, allow_redirects=True)
+        if resp.status_code != 200:
+            logger.warning(f"Google Sheets inventory fetch returned status {resp.status_code}")
+            return None
+        data = resp.json()
+        if not isinstance(data, dict):
+            return None
+        items = rows_to_inventory_items(data.get("headers", []), data.get("rows", []))
+        if items is None:
+            logger.info("Google Sheets response headers do not match inventory schema; using fallback.")
+            return None
+
+        raw_stats = data.get("stats") or {}
+        last_sync = raw_stats.get("lastSync") or "-"
+        stats = compute_inventory_stats(items, last_sync=last_sync)
+        payload = {
+            "success": True,
+            "source": "google_sheets",
+            "location": Config.MONITOR_LOCATION,
+            "last_sync": stats["last_sync"],
+            "stats": stats,
+            "items": items,
+            "logs": data.get("logs", []) if isinstance(data.get("logs"), list) else [],
+        }
+        save_inventory_snapshot(payload)
+        return payload
+    except Exception as e:
+        logger.warning(f"Error fetching inventory from Google Sheets: {e}")
+        return None
+
+
+@app.route("/api/inventory")
+def get_inventory():
+    force_refresh = request.args.get("refresh", "").strip().lower() in ("1", "true", "yes")
+    now = time.time()
+
+    if not force_refresh:
+        with _INVENTORY_LOCK:
+            cached = INVENTORY_STATE.get("cache")
+            if cached is not None and (now - INVENTORY_STATE.get("cache_ts", 0.0)) < INVENTORY_CACHE_TTL_SECONDS:
+                res = dict(cached)
+                res["is_syncing"] = INVENTORY_STATE["is_syncing"]
+                res["default_location"] = Config.MONITOR_LOCATION
+                res["last_error"] = INVENTORY_STATE["last_error"]
+                return jsonify(res)
+
+    payload = fetch_inventory_from_google_sheets()
+    if payload is None:
+        payload = load_inventory_fallback()
+        with _INVENTORY_LOCK:
+            res = dict(payload)
+            res["is_syncing"] = INVENTORY_STATE["is_syncing"]
+            res["default_location"] = Config.MONITOR_LOCATION
+            res["last_error"] = INVENTORY_STATE["last_error"]
+        return jsonify(res)
+
+    with _INVENTORY_LOCK:
+        INVENTORY_STATE["cache"] = payload
+        INVENTORY_STATE["cache_ts"] = time.time()
+        res = dict(payload)
+        res["is_syncing"] = INVENTORY_STATE["is_syncing"]
+        res["default_location"] = Config.MONITOR_LOCATION
+        res["last_error"] = INVENTORY_STATE["last_error"]
+    return jsonify(res)
+
+
+@app.route("/api/inventory/sync-emro", methods=["POST"])
+def sync_inventory_from_emro():
+    data = request.get_json(silent=True) or {}
+    raw_loc = str(data.get("location") or Config.MONITOR_LOCATION)
+    location = re.sub(r"[^A-Z0-9_-]", "", raw_loc.strip().upper()) or Config.MONITOR_LOCATION
+    sync_sheet = bool(data.get("sync_sheet", True))
+    current_user = session.get("user", "")
+
+    if not Config.has_emro_account(current_user):
+        return jsonify({
+            "success": False,
+            "error": f"บัญชีของคุณ ({current_user}) ยังไม่ได้เชื่อมต่อกับระบบ eMRO (ไม่มีรหัสผ่าน/2FA) จึงไม่สามารถดึงข้อมูลจาก eMRO ได้"
+        }), 403
+
+    if BATCH_STATE["is_running"]:
+        return jsonify({
+            "success": False,
+            "error": "ระบบกำลังเปิดใบงานชุด (Batch) อยู่ กรุณารอให้เสร็จสิ้นก่อนดึงข้อมูล Inventory"
+        }), 409
+
+    with _INVENTORY_LOCK:
+        if INVENTORY_STATE["is_syncing"]:
+            return jsonify({
+                "success": False,
+                "error": "กำลังซิงค์ข้อมูล Inventory จาก eMRO อยู่ กรุณารอสักครู่"
+            }), 409
+        INVENTORY_STATE["is_syncing"] = True
+        INVENTORY_STATE["last_error"] = ""
+
+    try:
+        async def _scrape_inventory():
+            creator = await WORKER.get_creator(user=current_user, slow_mo=40)
+            try:
+                await creator.dismiss_any_popups()
+            except Exception:
+                pass
+            txns = await eMROScraper.scrape_inventory_from_page(
+                creator.page,
+                location=location,
+                rows_per_page=50,
+            )
+            try:
+                await creator.capture_live_screen("inventory_scraped")
+            except Exception:
+                pass
+            return txns
+
+        with WORKER.lock:
+            transactions = WORKER.run_coro(_scrape_inventory(), timeout=180)
+
+        detector = ChangeDetector()
+        new_items, updated_items = detector.compare(transactions)
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        normalized_items = [_normalize_inventory_item(it, default_last_synced=now_str) for it in (transactions or [])]
+
+        sheet_synced = False
+        if sync_sheet and transactions:
+            try:
+                sheets_client = GoogleSheetsClient()
+                if sheets_client.is_configured:
+                    sheets_client.update_live_sheet(transactions)
+                    if new_items or updated_items:
+                        sheets_client.append_activity_log(new_items, updated_items)
+                    sheet_synced = True
+            except Exception as se:
+                logger.warning(f"Failed to sync live eMRO inventory to Google Sheets: {se}")
+
+        existing_logs = []
+        with _INVENTORY_LOCK:
+            if INVENTORY_STATE.get("cache") and isinstance(INVENTORY_STATE["cache"].get("logs"), list):
+                existing_logs = INVENTORY_STATE["cache"]["logs"]
+        if not existing_logs and INVENTORY_SNAPSHOT_FILE.exists():
+            try:
+                prev_snap = json.loads(INVENTORY_SNAPSHOT_FILE.read_text(encoding="utf-8"))
+                if isinstance(prev_snap.get("logs"), list):
+                    existing_logs = prev_snap["logs"]
+            except Exception:
+                pass
+
+        stats = compute_inventory_stats(normalized_items, last_sync=now_str)
+        payload = {
+            "success": True,
+            "source": "emro_live",
+            "location": location,
+            "last_sync": now_str,
+            "stats": stats,
+            "items": normalized_items,
+            "logs": existing_logs,
+            "new_count": len(new_items),
+            "updated_count": len(updated_items),
+            "sheet_synced": sheet_synced,
+            "is_syncing": False,
+            "default_location": Config.MONITOR_LOCATION,
+            "last_error": "",
+        }
+        save_inventory_snapshot(payload)
+        with _INVENTORY_LOCK:
+            INVENTORY_STATE["cache"] = payload
+            INVENTORY_STATE["cache_ts"] = time.time()
+        return jsonify(payload)
+
+    except Exception as e:
+        logger.exception("Error syncing inventory from eMRO")
+        with _INVENTORY_LOCK:
+            INVENTORY_STATE["last_error"] = str(e)
+        return jsonify({"success": False, "error": f"ไม่สามารถดึงข้อมูลจาก eMRO ได้: {e}"}), 500
+    finally:
+        with _INVENTORY_LOCK:
+            INVENTORY_STATE["is_syncing"] = False
+
+
+@app.route("/api/inventory/export-excel", methods=["POST"])
+def export_inventory_excel():
+    try:
+        data = request.get_json(silent=True) or {}
+        items = data.get("items")
+        if items is None:
+            with _INVENTORY_LOCK:
+                cached = INVENTORY_STATE.get("cache")
+            if cached and isinstance(cached.get("items"), list):
+                items = cached["items"]
+            else:
+                items = load_inventory_fallback().get("items", [])
+
+        if not items:
+            return jsonify({"error": "No inventory items to export"}), 400
+
+        import openpyxl
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Inventory Transactions"
+        ws.views.sheetView[0].showGridLines = True
+
+        header_fill = PatternFill(start_color="18181B", end_color="18181B", fill_type="solid")
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        data_font = Font(name="Calibri", size=10)
+        center_align = Alignment(horizontal="center", vertical="center")
+        left_align = Alignment(horizontal="left", vertical="center")
+
+        thin_border = Border(
+            left=Side(style="thin", color="D1D5DB"),
+            right=Side(style="thin", color="D1D5DB"),
+            top=Side(style="thin", color="D1D5DB"),
+            bottom=Side(style="thin", color="D1D5DB"),
+        )
+
+        columns = [
+            ("Transaction NO", "transaction_no", True),
+            ("Transaction Type", "transaction_type", True),
+            ("P/N", "pn", False),
+            ("S/N", "sn", False),
+            ("Batch", "batch", True),
+            ("GRB", "grb", True),
+            ("Location", "location", True),
+            ("Bin", "bin", True),
+            ("Condition", "condition", True),
+            ("QTY", "qty", True),
+            ("Unit Cost", "unit_cost", True),
+            ("A/C", "ac", True),
+            ("W/O - S/O", "wo_so", True),
+            ("Issued To", "issued_to", True),
+            ("Issued To Name", "issued_to_name", False),
+            ("Order Type", "order_type", True),
+            ("Order NO", "order_no", True),
+            ("Vendor Name", "vendor_name", False),
+            ("Status", "status", True),
+            ("Created Date", "created_date", True),
+            ("Created By", "created_by", True),
+            ("Name", "created_name", False),
+            ("Defect Description", "defect_description", False),
+        ]
+
+        headers = [col[0] for col in columns]
+        ws.append(headers)
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center_align
+            cell.border = thin_border
+        ws.row_dimensions[1].height = 24
+
+        for r_idx, itm in enumerate(items, start=2):
+            row_data = [str(itm.get(key, "") or "").strip() for _, key, _ in columns]
+            ws.append(row_data)
+            ws.row_dimensions[r_idx].height = 20
+            for c_idx, (_, _, is_center) in enumerate(columns, start=1):
+                cell = ws.cell(row=r_idx, column=c_idx)
+                cell.font = data_font
+                cell.border = thin_border
+                cell.alignment = center_align if is_center else left_align
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            col_letter = col[0].column_letter
+            ws.column_dimensions[col_letter].width = min(max(max_len + 4, 12), 48)
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+
+        filename = f"Inventory_Transactions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        return send_file(
+            bio,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    except Exception as e:
+        logger.exception("Error exporting inventory transactions to Excel")
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     import sys

@@ -113,19 +113,21 @@ def main():
         except Exception:
             time.sleep(0.3)
 
-    # Extract Cloudflare URL from log
-    cf_url = "Checking..."
-    for _ in range(6):
-        if log_file.exists():
-            try:
-                content = log_file.read_text(encoding="utf-8", errors="ignore")
-                m = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", content)
-                if m:
-                    cf_url = m.group(0)
-                    break
-            except Exception:
-                pass
-        time.sleep(1)
+    # Extract Cloudflare URL from log only when cloudflared is running
+    cf_url = ""
+    if cf_exe.exists() and cf_proc is not None:
+        cf_url = "Checking..."
+        for _ in range(6):
+            if log_file.exists():
+                try:
+                    content = log_file.read_text(encoding="utf-8", errors="ignore")
+                    m = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", content)
+                    if m:
+                        cf_url = m.group(0)
+                        break
+                except Exception:
+                    pass
+            time.sleep(1)
 
     # Auto sync latest Online URL to Google Sheet for outside users
     if cf_url.startswith("https://"):
@@ -149,10 +151,11 @@ def main():
     print("=" * 66)
     print(f"\n  [1] ลิงก์ภายในวงเน็ต (LAN / Wi-Fi) : http://{lan_ip}:8000")
     print("      (ลิงก์คงที่ ไม่เปลี่ยน เข้าได้ทุกเครื่องในออฟฟิศ/วงเน็ตเดียวกัน)\n")
-    print(f"  [2] ลิงก์ออนไลน์ภายนอก (Cloudflare) : {cf_url}")
-    print("      (สำหรับเข้านอกสถานที่ / เชื่อมต่อผ่านเน็ตมือถือ 4G/5G)")
-    print("      * อัปเดตลิงก์ไปยัง Google Sheet (แท็บ Live Transactions) เรียบร้อยแล้ว\n")
-    print(f"  [3] ลิงก์เครื่องนี้ (Localhost)      : http://localhost:8000\n")
+    print(f"  [2] ลิงก์เครื่องนี้ (Localhost)      : http://localhost:8000\n")
+    if cf_url.startswith("https://"):
+        print(f"  [3] ลิงก์ออนไลน์ภายนอก (Cloudflare) : {cf_url}")
+        print("      (สำหรับเข้านอกสถานที่ / เชื่อมต่อผ่านเน็ตมือถือ 4G/5G)")
+        print("      * อัปเดตลิงก์ไปยัง Google Sheet (แท็บ Live Transactions) เรียบร้อยแล้ว\n")
     print("-" * 66)
     print("  สถานะ: ระบบออนไลน์พร้อมใช้งานแล้ว! (Online and Ready)")
     print("\n  * เปิดหน้าต่างนี้ค้างไว้ตลอดการใช้งาน")

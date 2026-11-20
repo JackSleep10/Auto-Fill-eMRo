@@ -39,6 +39,51 @@
 
 ## 📜 2. ประวัติการแก้ไขและเหตุการณ์สำคัญ (Changelog & Incident History)
 
+### [2026-11-20] เพิ่มแท็บ "คลังอะไหล่ (Inventory)" บน Navbar (`web_app.py`, `data/gse_dashboard.html`, `scraper/emro_scraper.py`)
+- **ความต้องการของผู้ใช้:**
+  - เพิ่มหน้า **Inventory Transaction Monitor & Search** เข้ามาในแท็บ Navbar ของเว็บหลัก (`web_app.py`) เพื่อให้เข้าไปเช็กข้อมูลและตรวจสอบการแก้ไขได้สะดวกในที่เดียว
+- **การแก้ไข:**
+  1. **Refactored Scraper Helpers (`scraper/emro_scraper.py`):** แยกเมธอดระดับ `page` (`is_inventory_module_active`, `navigate_page_to_inventory`, `set_page_rows_per_page`, `extract_page_datatable_rows`, `scrape_inventory_from_page`) เพื่อใช้ซ้ำกับ Browser Session ของ `GSEWorker` ได้อย่างปลอดภัย พร้อมแก้การเช็กแท็บ `Inventory` ไม่ให้สับสนกับปุ่ม `Find` ของหน้า `GSE W/O` และแก้ f-string compatibility บน Python 3.11
+  2. **Inventory Backend API (`web_app.py`):** เพิ่ม Endpoint `/api/inventory` (ดึงจาก Google Sheets `Live Transactions` พร้อม Cache 30 วิ และ Fallback ไปยัง `data/inventory_snapshot.json` / `data/cache.json` พร้อมตรวจเช็ก Schema ป้องกันกรณีชีตถูกทับโดย `sheet_url_sync`), `/api/inventory/sync-emro` (ดึงสดจากหน้า `Inventory Transaction History Query` บน eMRO ผ่าน Session ของผู้ใช้ที่ล็อกอิน), และ `/api/inventory/export-excel`
+  3. **Precision Dark Minimal UI (`data/gse_dashboard.html`):** เพิ่มแท็บที่ 6 `คลังอะไหล่ (Inventory)` บน Navbar พร้อม KPI Cards 4 ช่อง, ช่องค้นหา P/N, S/N, W/O, A/C, Batch, Bin, ผู้เบิก, ปุ่มกรองประเภท (`ISSUED`, `RECEIVING`, `TRANSFER`, `RTS/WO`), สลับโหมดการ์ด/ตาราง, ตาราง `Activity Log` แบบพับได้ และ Modal ดูข้อมูลครบทุกฟิลด์ (แก้บั๊กเปิด Modal ให้ดึงจาก `filteredInventoryItems[idx]`)
+- **ผลการตรวจสอบ:**
+  - เพิ่มชุดทดสอบ [tests/test_inventory_api.py](file:///d:/Project%20Auto-fill-Emro/tests/test_inventory_api.py) และรัน `unittest discover -s tests -v` ผ่านทั้งหมด **15/15** รายการ
+  - ทดสอบเปิดใช้งานจริงผ่าน Playwright (`1440×900` และ `390×844`) โหลดข้อมูลจาก Google Sheets สำเร็จ **48 รายการ**, ทดสอบค้นหา/กรอง/เปิด Modal/สลับการ์ด-ตาราง พบ `0` console/page errors และไม่ล้นขอบจอ
+
+### [2026-11-19] ปรับปรุง UI/UX ใหม่เป็นสไตล์ Precision Dark Minimal (`data/login.html`, `data/gse_dashboard.html`)
+- **ความต้องการของผู้ใช้:**
+  - ปรับแต่งหน้า UI/UX ให้ดูมีสไตล์และ Minimal ยิ่งขึ้น
+- **การแก้ไข:**
+  1. **โทนสีและพื้นผิวแบบ Precision Dark Minimal (`#09090B` / `#111113`):** ลดความฉูดฉาดของ Gradient/Glow และเปลี่ยนมาใช้โครงสี Obsidian/Zinc Monochrome คู่กับเส้นขอบบาง `1px` (`border-zinc-800/80`) พร้อม Semantic Badges แบบนุ่มนวลและหยุดอนิเมชันกระพริบบนรายการ INACTIVE
+  2. **Typography & Browser Surface:** เพิ่มฟอนต์ `Inter` ร่วมกับ `Prompt` และ `JetBrains Mono` (`tabular-nums`), กำหนด `::selection`, `caret-color`, `:focus-visible` และ Custom Scrollbar ให้เข้าชุดกันทั้งระบบ
+  3. **Unified Header & Underline Tabs:** รวม Top Bar กับแถบนำทางแท็บให้เป็น Header เดียวที่สะอาดตา ใช้ Underline Tabs และปรับ Segmented Controls (การ์ด/ตาราง) ให้เป็นรูปแบบเดียวกันทุกแท็บ รวมถึงแก้บักตัวกรอง `ACTIVE`/`INACTIVE` ในแท็บฐานข้อมูล GSE (`data-status` / `data-cat`)
+  4. **คงไว้ทุกฟังก์ชันเดิม:** รักษา IDs, Event Handlers, Autocomplete, Batch Queue, Live Screen, History Log และ Excel Export ครบ 100%
+- **ผลการตรวจสอบ:**
+  - ทดสอบเปิดทุกหน้าและทุกแท็บผ่าน Playwright (`1440×900` และ `390×844`) พบ `0` console/page errors, ไม่มีการล้นขอบจอ (overflow), และ Autocomplete `TR-060` ➜ `TLM-TR-060` ทำงานสมบูรณ์
+
+### [2026-11-19] แก้ไขปัญหาพิมพ์รหัสอุปกรณ์ไม่ขึ้น (Auto-Sync GSE Master List เมื่อไม่มีไฟล์ `data/gse_master_list.csv`)
+- **ปัญหาที่พบ:**
+  - หลัง Clone โปรเจกต์ลงเครื่องใหม่ เมื่อพิมพ์รหัสอุปกรณ์ (เช่น `TR-060`) ในหน้าเปิดใบงานแจ้งซ่อมด่วน ไม่มีรายการ Autocomplete ขึ้นมาให้เลือก
+- **สาเหตุ (Root Cause):**
+  - ไฟล์ `data/gse_master_list.csv` ถูก ignore ใน `.gitignore` จึงไม่ได้ติดมากับ Git และ `web_app.py` เดิมไม่มีการดึงข้อมูลจาก Google Sheets ให้อัตโนมัติตอนเริ่มต้นหรือตอนเรียก `/api/gse-master` หาก `GSE_MASTER` ว่างอยู่
+- **การแก้ไข:**
+  1. ซิงค์ข้อมูล Master List ลงใน `data/gse_master_list.csv` จาก Google Sheets (ได้ทั้งหมด **916 รายการ** รวมถึง `TLM-TR-060`)
+  2. เพิ่มฟังก์ชัน `ensure_master_list()` (พร้อม `_MASTER_LOCK`) ใน `web_app.py` และตั้ง `MASTER_CSV_PATH = Config.BASE_DIR / "data" / "gse_master_list.csv"` เพื่อโหลดจาก CSV หรือดึงจาก Google Sheets อัตโนมัติทั้งตอนเริ่มระบบและเมื่อเรียก `/api/gse-master` หากรายการยังว่างอยู่
+- **ผลการตรวจสอบ:**
+  - ทดสอบเรียก `/api/gse-master?q=TR-060` ผ่าน Flask test client ได้ผลลัพธ์ `TLM-TR-060` (HTTP 200) และทดสอบกรณี `GSE_MASTER` ว่างระบบสามารถโหลดกลับคืนครบ 916 รายการ
+
+### [2026-11-19] ลดจำนวนไฟล์ `.bat` เหลือไฟล์เดียว (`start_gse_app.bat`), โหมด Local/LAN และปรับ Path ให้ยืดหยุ่น
+- **ความต้องการของผู้ใช้:**
+  - ลดจำนวนไฟล์ `.bat`/`.vbs` ที่เยอะเกินไปให้เหลือเพียงไฟล์เดียวสำหรับเปิดใช้งานบนเครื่องนี้ และยังไม่ใช้งาน `cloudflared.exe`
+- **การแก้ไข:**
+  1. **รวมตัวเปิดระบบเหลือ 1 ไฟล์ (`start_gse_app.bat`):** ลบไฟล์ `.bat`/`.vbs` ที่ซ้ำซ้อนและไม่ได้ใช้งานออก 9 ไฟล์ (`check_status.bat`, `install_autostart.bat`, `PUSH_TO_GITHUB.bat`, `run_background.vbs`, `start_monitor.bat`, `start_online.bat`, `stop_monitor.bat`, `uninstall_autostart.bat`, `view_log.bat`)
+  2. **รองรับ Path แบบ Portable และ `.venv` (`start_gse_app.bat`, `scripts/run.ps1`):** เปลี่ยนจาก Path ตายตัว `"D:\Project dashboard"` เป็น `%~dp0` (และ `$PSScriptRoot` ใน `scripts/run.ps1`) พร้อมตรวจจับ `.venv\Scripts\python.exe` อัตโนมัติและเรียก `run_system.py`
+  3. **โหมด Local/LAN โดยไม่ต้องมี `cloudflared.exe` (`run_system.py`):** ข้ามลูปรอ `cloudflare.log` ทันทีเมื่อไม่มี `cloudflared.exe` และแสดงลิงก์ `[1] LAN/Wi-Fi` กับ `[2] Localhost` ให้สะอาดขึ้น
+  4. **อัปเดต Dependencies และ `.gitignore` (`requirements.txt`, `.gitignore`):** เพิ่ม `openpyxl` สำหรับการ Export Excel และเพิ่ม `.venv/` กับ `venv/` ใน `.gitignore`
+- **ผลการตรวจสอบ:**
+  - สร้าง `.venv` (Python 3.11.15) ติดตั้งแพ็กเกจทั้งหมดใน `requirements.txt` และเบราว์เซอร์ Playwright Chromium (`151.0.7922.34`) เรียบร้อย
+  - ทดสอบ Import `web_app`, `openpyxl`, `run_system` และรัน Unit Tests (`unittest discover -s tests`) ผ่าน 7/7 รายการ
+
 ### [2026-11-16] Smart PM Description Parser, Export Excel 3 คอลัมน์ และกฎ Auto Commit & Push
 - **การปรับปรุงระบบ:**
   1. **Smart PM Description Parser (`data/gse_dashboard.html`, `web_app.py`):** รองรับการวางรายการแบบเว้นวรรค/Tab/Comma/Semicolon และแปลงตัวย่อชุดตรวจเช็คอัตโนมัติ (เช่น `TLM-AC-003 A` ➜ GSE: `TLM-AC-003`, Description: `PM A`) พร้อมช่องแก้ไข Description แบบ inline ในตารางคิว

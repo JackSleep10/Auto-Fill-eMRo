@@ -144,7 +144,8 @@ class eMROScraper:
                                 target_id = f"mainForm:code{idx+1}_input"
                                 active_id = await self.page.evaluate("() => document.activeElement ? document.activeElement.id : null")
                                 if active_id != target_id:
-                                    await self.page.locator(f"#{target_id.replace(':', r'\\:')}").focus()
+                                    escaped_id = target_id.replace(":", r"\\:")
+                                    await self.page.locator(f"#{escaped_id}").focus()
                                     await asyncio.sleep(0.1)
                                 await self.page.keyboard.press(digit)
                                 await asyncio.sleep(0.25)
@@ -264,6 +265,105 @@ class eMROScraper:
                 pass
         return False
 
+    @classmethod
+    async def is_inventory_module_active(cls, page: Page) -> bool:
+        """Checks whether the 'Inventory Transaction History Query' module is currently active on the page."""
+        active_tab_selectors = [
+            "li.ui-tabs-selected:has-text('Inventory')",
+            "li.ui-state-active:has-text('Inventory')",
+            "tbody[id*='dw_inventory']",
+            "input[id*='22918']",
+        ]
+        for sel in active_tab_selectors:
+            try:
+                loc = page.locator(sel)
+                cnt = await loc.count()
+                for i in range(cnt):
+                    if await loc.nth(i).is_visible():
+                        return True
+            except Exception:
+                pass
+        return False
+
+    @classmethod
+    async def _first_visible(cls, locator):
+        """Returns the first visible element from a Playwright locator, or None."""
+        try:
+            cnt = await locator.count()
+            for i in range(cnt):
+                cand = locator.nth(i)
+                if await cand.is_visible():
+                    return cand
+        except Exception:
+            pass
+        return None
+
+    @classmethod
+    async def navigate_page_to_inventory(cls, page: Page):
+        """
+        Checks if Inventory Transaction History Query module is open on `page`.
+        If not, switches to its tab or opens it via Favorites / sidebar search.
+        """
+        print("[eMROScraper] Checking if 'Inventory Transaction History Query' module is open...")
+        try:
+            # 1. Check strictly if Inventory module is already active
+            if await cls.is_inventory_module_active(page):
+                print("[eMROScraper] Inventory module is already open and active.")
+                return
+
+            # Check if there is an inactive tab header for Inventory that we can click
+            tab_header = await cls._first_visible(
+                page.locator(".ui-tabview-title:has-text('Inventory'), .ui-tabs-nav a:has-text('Inventory')")
+            )
+            if tab_header:
+                await tab_header.click()
+                await asyncio.sleep(1)
+                if await cls.is_inventory_module_active(page):
+                    print("[eMROScraper] Switched to open Inventory tab.")
+                    return
+
+            # 2. Locate exact 'Favorites' menu header
+            fav_el = await cls._first_visible(page.get_by_text("Favorites", exact=True))
+            if fav_el:
+                item = await cls._first_visible(page.get_by_text("Inventory Transaction History Query", exact=False))
+                if not item:
+                    print("[eMROScraper] Clicking 'Favorites' header to expand sidebar menu...")
+                    await fav_el.click()
+                    await asyncio.sleep(1.5)
+                    item = await cls._first_visible(page.get_by_text("Inventory Transaction History Query", exact=False))
+
+                if item:
+                    print("[eMROScraper] Clicking 'Inventory Transaction History Query'...")
+                    await item.click()
+                    await asyncio.sleep(3)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=15000)
+                    except Exception:
+                        pass
+                    return
+
+            # 3. Fallback: Use the sidebar search box 'Typing here to search a window...'
+            search_box = await cls._first_visible(
+                page.locator("input[placeholder*='search a window'], input[placeholder*='Typing here']")
+            )
+            if search_box:
+                print("[eMROScraper] Using sidebar search box to open module...")
+                await search_box.fill("Inventory Transaction History Query")
+                await asyncio.sleep(1)
+                suggestion = await cls._first_visible(page.get_by_text("Inventory Transaction History Query", exact=False))
+                if suggestion:
+                    await suggestion.click()
+                else:
+                    await search_box.press("Enter")
+                await asyncio.sleep(3)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            print(f"[eMROScraper] Note on navigation: {e}")
+
     async def navigate_to_module(self):
         """
         Step 1:
@@ -271,101 +371,133 @@ class eMROScraper:
         then clicks 'Inventory Transaction History Query'.
         Fallback: Uses the sidebar search box 'Typing here to search a window...'.
         """
-        print("[eMROScraper] Checking if 'Inventory Transaction History Query' module is open...")
-        try:
-            # 1. Check if FIND button or module is already visible
-            find_btn = self.page.locator("button:has-text('Find'), a:has-text('Find'), span:has-text('Find'), [title='Find']").first
-            if await find_btn.is_visible():
-                print("[eMROScraper] Module is already open and active.")
-                return
+        if self.page:
+            await self.navigate_page_to_inventory(self.page)
 
-            # Check if there is an inactive tab header for Inventory that we can click
-            tab_header = self.page.locator(".ui-tabview-title:has-text('Inventory')").first
-            if await tab_header.is_visible():
-                await tab_header.click()
-                await asyncio.sleep(1)
-                if await find_btn.is_visible():
-                    print("[eMROScraper] Switched to open Inventory tab.")
-                    return
-
-            # 2. Locate exact 'Favorites' menu header
-            fav_el = self.page.get_by_text("Favorites", exact=True).first
-            if await fav_el.is_visible():
-                item = self.page.get_by_text("Inventory Transaction History Query", exact=False).first
-                if not await item.is_visible():
-                    print("[eMROScraper] Clicking 'Favorites' header to expand sidebar menu...")
-                    await fav_el.click()
-                    await asyncio.sleep(1.5)
-
-                if await item.is_visible():
-                    print("[eMROScraper] Clicking 'Inventory Transaction History Query'...")
-                    await item.click()
-                    await asyncio.sleep(3)
-                    try:
-                        await self.page.wait_for_load_state("networkidle", timeout=15000)
-                    except Exception:
-                        pass
-                    return
-
-            # 3. Fallback: Use the sidebar search box 'Typing here to search a window...'
-            search_box = self.page.locator("input[placeholder*='search a window'], input[placeholder*='Typing here']").first
-            if await search_box.is_visible():
-                print("[eMROScraper] Using sidebar search box to open module...")
-                await search_box.fill("Inventory Transaction History Query")
-                await asyncio.sleep(1)
-                suggestion = self.page.get_by_text("Inventory Transaction History Query", exact=False).first
-                if await suggestion.is_visible():
-                    await suggestion.click()
-                else:
-                    await search_box.press("Enter")
-                await asyncio.sleep(3)
-                try:
-                    await self.page.wait_for_load_state("networkidle", timeout=15000)
-                except Exception:
-                    pass
-
-        except Exception as e:
-            print(f"[eMROScraper] Note on navigation: {e}")
-
-    async def set_rows_per_page(self, count: int = 50):
-        """
-        Step 3:
-        Changes the pagination rows-per-page dropdown from 10 to 50.
-        """
+    @classmethod
+    async def set_page_rows_per_page(cls, page: Page, count: int = 50):
+        """Changes the pagination rows-per-page dropdown to `count` on `page`."""
         print(f"[eMROScraper] Checking rows per page setting ({count})...")
         try:
-            # Check native select
-            select_el = self.page.locator("select[id*='rppDD'], select.ui-paginator-rpp-options").first
-            if await select_el.is_visible():
+            # Check native select (prefer visible element across tabs)
+            select_el = await cls._first_visible(
+                page.locator("select[id*='rppDD'], select.ui-paginator-rpp-options")
+            )
+            if select_el:
                 current_val = await select_el.input_value()
                 if current_val != str(count):
                     await select_el.select_option(str(count))
                     print(f"[eMROScraper] Selected {count} in native dropdown.")
                     await asyncio.sleep(2)
                     try:
-                        await self.page.wait_for_load_state("networkidle", timeout=10000)
+                        await page.wait_for_load_state("networkidle", timeout=10000)
                     except Exception:
                         pass
                 return
 
             # Check PrimeFaces custom dropdown
-            custom_dropdown = self.page.locator("div[id*='rppDD'], .ui-paginator-rpp-options").first
-            if await custom_dropdown.is_visible():
+            custom_dropdown = await cls._first_visible(
+                page.locator("div[id*='rppDD'], .ui-paginator-rpp-options")
+            )
+            if custom_dropdown:
                 text = await custom_dropdown.inner_text()
                 if str(count) not in text:
                     await custom_dropdown.click()
                     await asyncio.sleep(0.5)
-                    opt = self.page.locator(f".ui-selectonemenu-item:has-text('{count}')").first
-                    if await opt.is_visible():
+                    opt = await cls._first_visible(page.locator(f".ui-selectonemenu-item:has-text('{count}')"))
+                    if opt:
                         await opt.click()
                         print(f"[eMROScraper] Selected '{count}' in custom dropdown.")
                         await asyncio.sleep(2)
                         try:
-                            await self.page.wait_for_load_state("networkidle", timeout=10000)
+                            await page.wait_for_load_state("networkidle", timeout=10000)
                         except Exception:
                             pass
         except Exception as e:
             print(f"[eMROScraper] Note on setting rows per page: {e}")
+
+    async def set_rows_per_page(self, count: int = 50):
+        """
+        Step 3:
+        Changes the pagination rows-per-page dropdown from 10 to 50.
+        """
+        if self.page:
+            await self.set_page_rows_per_page(self.page, count=count)
+
+    @classmethod
+    async def scrape_inventory_from_page(
+        cls,
+        page: Page,
+        location: str = Config.MONITOR_LOCATION,
+        rows_per_page: int = 50,
+    ) -> List[Dict]:
+        """
+        Scrapes Inventory Transaction History Query on an already-authenticated Playwright `page`.
+        1. Open module via tab / Favorites / sidebar search
+        2. Enter Location & Click FIND
+        3. Set rows per page
+        4. Extract rows with expanded details
+        """
+        # 1. Ensure module is opened
+        await cls.navigate_page_to_inventory(page)
+
+        # 2. Enter Location & Click FIND
+        print(f"[eMROScraper] Step 2: Entering Location '{location}' and clicking FIND...")
+
+        loc_input = await cls._first_visible(page.locator("input[id*='22918'], input[id*='location' i]"))
+
+        # Method B: By Location label proximity
+        if not loc_input:
+            loc_label = await cls._first_visible(page.get_by_text("Location", exact=True))
+            if loc_label:
+                cand = loc_label.locator("xpath=following::input[1]").first
+                if await cand.is_visible():
+                    loc_input = cand
+
+        # Method C: Search visible inputs in the General panel
+        if not loc_input:
+            inputs = await page.locator("input[type='text'], input:not([type])").all()
+            for inp in inputs:
+                try:
+                    if await inp.is_visible():
+                        val = await inp.input_value()
+                        if val.strip().upper() == location.upper():
+                            loc_input = inp
+                            break
+                except Exception:
+                    pass
+
+        if loc_input:
+            await loc_input.fill("")
+            await loc_input.fill(location)
+            print(f"[eMROScraper] Filled Location: {location}")
+        else:
+            print("[eMROScraper] Warning: Location input field not found directly.")
+
+        # Click FIND button (prefer visible Find button in active tab)
+        find_btn = await cls._first_visible(
+            page.locator("button:has-text('Find'), a:has-text('Find'), span:has-text('Find'), [title='Find']")
+        )
+        if find_btn:
+            await find_btn.click()
+            print("[eMROScraper] Clicked FIND button.")
+        elif loc_input:
+            await loc_input.press("Enter")
+
+        # Wait for data table to load
+        await asyncio.sleep(3)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
+
+        # 3. Change rows per page
+        await cls.set_page_rows_per_page(page, count=rows_per_page)
+
+        # 4. Extract records
+        transactions = await cls.extract_page_datatable_rows(page)
+        print(f"[eMROScraper] Extracted {len(transactions)} transaction records.")
+        return transactions
 
     async def query_inventory_transactions(self, location: str = Config.MONITOR_LOCATION) -> List[Dict]:
         """
@@ -380,88 +512,32 @@ class eMROScraper:
                 print("[eMROScraper] Session expired or on login page. Auto-authenticating...")
                 await self.ensure_authenticated()
 
-            # 1. Ensure module is opened via Favorites
-            await self.navigate_to_module()
-
-            # 2. Enter Location DM01 & Click FIND
-            print(f"[eMROScraper] Step 2: Entering Location '{location}' and clicking FIND...")
-            
-            loc_input = None
-            
-            # Method A: By known ID pattern
-            by_id = self.page.locator("input[id*='22918'], input[id*='location' i]").first
-            if await by_id.is_visible():
-                loc_input = by_id
-
-            # Method B: By Location label proximity
-            if not loc_input:
-                loc_label = self.page.get_by_text("Location", exact=True).first
-                if await loc_label.is_visible():
-                    cand = loc_label.locator("xpath=following::input[1]").first
-                    if await cand.is_visible():
-                        loc_input = cand
-
-            # Method C: Search all visible inputs in the General panel
-            if not loc_input:
-                inputs = await self.page.locator("input[type='text'], input:not([type])").all()
-                for inp in inputs:
-                    try:
-                        if await inp.is_visible():
-                            val = await inp.input_value()
-                            if val.strip().upper() == location.upper():
-                                loc_input = inp
-                                break
-                    except Exception:
-                        pass
-
-            if loc_input:
-                await loc_input.fill("")
-                await loc_input.fill(location)
-                print(f"[eMROScraper] Filled Location: {location}")
-            else:
-                print(f"[eMROScraper] Warning: Location input field not found directly.")
-
-            # Click FIND button (binoculars icon or text Find)
-            find_btn = self.page.locator("button:has-text('Find'), a:has-text('Find'), span:has-text('Find'), [title='Find']").first
-            if await find_btn.is_visible():
-                await find_btn.click()
-                print("[eMROScraper] Clicked FIND button.")
-            elif loc_input:
-                await loc_input.press("Enter")
-
-            # Wait for data table to load
-            await asyncio.sleep(3)
-            try:
-                await self.page.wait_for_load_state("networkidle", timeout=10000)
-            except Exception:
-                pass
-
-            # 3. Change rows per page to 50
-            await self.set_rows_per_page(50)
-
-            # 4. Extract records
-            transactions = await self._extract_datatable_rows()
-            print(f"[eMROScraper] Extracted {len(transactions)} transaction records.")
-            return transactions
+            return await self.scrape_inventory_from_page(self.page, location=location, rows_per_page=50)
 
         except Exception as e:
             print(f"[eMROScraper] Error during scraping: {e}")
             await self.take_screenshot("scrape_error")
             return []
 
-    async def _extract_datatable_rows(self) -> List[Dict]:
+    @classmethod
+    async def extract_page_datatable_rows(cls, page: Page) -> List[Dict]:
         """
-        Finds the PrimeFaces DataTable, clicks row togglers to expand detail panels,
-        and extracts all 27 fields cleanly 1-to-1.
+        Finds the PrimeFaces DataTable on `page`, clicks row togglers to expand detail panels,
+        and extracts all 27+ fields cleanly 1-to-1.
         """
         results = []
 
-        # Target only main data rows (exclude expansion containers)
-        rows = await self.page.query_selector_all(
-            "tbody[id*='dw_inventory'] tr:not(.ui-expanded-row-content), .ui-datatable-data tr:not(.ui-expanded-row-content)"
-        )
+        # Target only main inventory data rows (exclude expansion containers and hidden tabs)
+        rows = await page.query_selector_all("tbody[id*='dw_inventory'] tr:not(.ui-expanded-row-content)")
         if not rows:
-            rows = await self.page.query_selector_all("table tbody tr:not(.ui-expanded-row-content)")
+            rows = await page.query_selector_all(
+                ".ui-tabs-panel:not(.ui-helper-hidden) .ui-datatable-data tr:not(.ui-expanded-row-content), "
+                ".ui-tabview-panel:not(.ui-helper-hidden) .ui-datatable-data tr:not(.ui-expanded-row-content)"
+            )
+        if not rows:
+            rows = await page.query_selector_all(".ui-datatable-data tr:not(.ui-expanded-row-content)")
+        if not rows:
+            rows = await page.query_selector_all("table tbody tr:not(.ui-expanded-row-content)")
 
         print(f"[eMROScraper] Found {len(rows)} data rows to process.")
 
@@ -519,6 +595,12 @@ class eMROScraper:
                 print(f"[eMROScraper] Note on extracting row #{idx}: {e}")
 
         return results
+
+    async def _extract_datatable_rows(self) -> List[Dict]:
+        """Instance wrapper delegating to `extract_page_datatable_rows`."""
+        if not self.page:
+            return []
+        return await self.extract_page_datatable_rows(self.page)
 
     async def take_screenshot(self, name: str = "capture"):
         """Saves a screenshot with timestamp for debugging."""

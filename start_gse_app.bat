@@ -1,13 +1,18 @@
 @echo off
 chcp 65001 >nul
-cd /d "D:\Project dashboard"
+title Thai Lion Air - GSE Work Order Creator
+cd /d "%~dp0"
 
-echo ======================================================
-echo    Lion Air - GSE Work Order Automation Web App
-echo ======================================================
-echo.
-echo Starting GSE W/O Web Server on http://localhost:8000 ...
-echo Opening web browser...
-start http://localhost:8000
-python web_app.py
+set "PYTHON_EXE="
+if exist ".venv\Scripts\python.exe" (
+    set "PYTHON_EXE=.venv\Scripts\python.exe"
+) else if exist "C:\Users\acklo\.local\bin\python3.11.exe" (
+    set "PYTHON_EXE=C:\Users\acklo\.local\bin\python3.11.exe"
+) else if exist "%USERPROFILE%\.local\bin\python3.11.exe" (
+    set "PYTHON_EXE=%USERPROFILE%\.local\bin\python3.11.exe"
+) else (
+    set "PYTHON_EXE=python"
+)
+
+"%PYTHON_EXE%" run_system.py
 pause
