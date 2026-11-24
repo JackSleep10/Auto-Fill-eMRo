@@ -14,3 +14,7 @@ __pycache__/
 *.log
 .venv/
 venv/
+
+# Project Inventory runtime data & secrets
+project_inventory/.env
+project_inventory/data/

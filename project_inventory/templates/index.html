@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>eMRO Inventory Search — DM01 (Thai Lion Air)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Noto Sans Thai', 'Inter', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <!-- ==================== TOP HEADER (THAI LION AIR RED & WHITE) ==================== -->
+  <header class="sticky top-0 z-30 bg-gradient-to-r from-[#D71920] via-[#C8102E] to-[#A60D22] text-white shadow-md border-b-2 border-red-800">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-white text-[#D71920] flex items-center justify-center shadow-md font-extrabold">
+          <i class="fa-solid fa-plane-up text-lg"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-bold text-white tracking-tight">THAI LION AIR • eMRO Inventory Search</h1>
+            <span class="px-2 py-0.5 text-[11px] font-mono font-bold rounded-md bg-white text-[#D71920] shadow-sm">
+              {{ locations|join(', ') }}
+            </span>
+          </div>
+          <p class="text-xs text-red-100">
+            ค้นหา Part No / Description / Bin / S/N และประวัติการตัดเบิก โดยไม่ต้องเข้า eMRO • ซิงก์อัตโนมัติทุก {{ sync_interval }} นาที ({{ sync_hours }})
+          </p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- LAN IP Badge -->
+        <button id="ipBadge" onclick="copyText('http://{{ lan_ip }}:{{ port }}', this)"
+          title="คลิกเพื่อคัดลอกลิงก์สำหรับเปิดในเครื่องอื่น"
+          class="px-2.5 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 border border-white/30 text-xs font-mono text-white flex items-center gap-1.5 cursor-pointer transition">
+          <i class="fa-solid fa-network-wired text-amber-200"></i>
+          <span>http://{{ lan_ip }}:{{ port }}</span>
+          <i class="fa-regular fa-copy text-[10px] text-red-100"></i>
+        </button>
+
+        <!-- Export Excel Button -->
+        <button onclick="downloadExcel()"
+          class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/50 text-xs font-semibold flex items-center gap-1.5 shadow-sm cursor-pointer transition">
+          <i class="fa-solid fa-file-excel"></i>
+          <span>Export Excel</span>
+        </button>
+
+        <!-- Refresh Now Button -->
+        <button id="refreshBtn" onclick="openPinModal()"
+          class="px-3.5 py-1.5 rounded-lg bg-white hover:bg-red-50 text-[#D71920] text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition">
+          <i id="refreshIcon" class="fa-solid fa-rotate"></i>
+          <span id="refreshBtnText">Refresh ตอนนี้</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Sync Progress Bar -->
+    <div id="syncBanner" class="hidden bg-red-950/90 border-t border-red-400/30 px-4 py-2">
+      <div class="max-w-7xl mx-auto flex items-center justify-between text-xs text-white">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-circle-notch fa-spin text-amber-300"></i>
+          <span id="syncProgressText">กำลังดึงข้อมูลล่าสุดจาก eMRO...</span>
+        </div>
+        <span class="font-mono text-[11px] text-red-200">ทำงานเบื้องหลัง ค้นหาข้อมูลเดิมได้ตามปกติ</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN CONTENT ==================== -->
+  <main class="max-w-7xl mx-auto px-4 py-5 space-y-5">
+
+    <!-- Status & KPI Strip -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div onclick="setStatusFilter('in')" class="cursor-pointer bg-white hover:bg-emerald-50/40 border border-slate-200 border-l-4 border-l-emerald-500 rounded-xl p-3.5 shadow-sm transition">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
+          <span>รายการที่มีของ (In Stock)</span>
+          <i class="fa-solid fa-circle-check text-emerald-600"></i>
+        </div>
+        <div class="mt-1 flex items-baseline gap-2">
+          <span id="statInPns" class="text-2xl font-bold font-mono text-emerald-600">-</span>
+          <span class="text-xs text-slate-500">P/N (<span id="statInRows" class="font-semibold text-slate-700">-</span> แถว)</span>
+        </div>
+      </div>
+
+      <div onclick="setStatusFilter('out')" class="cursor-pointer bg-white hover:bg-red-50/40 border border-slate-200 border-l-4 border-l-[#D71920] rounded-xl p-3.5 shadow-sm transition">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
+          <span>ของหมดแล้ว (Out of Stock)</span>
+          <i class="fa-solid fa-triangle-exclamation text-[#D71920]"></i>
+        </div>
+        <div class="mt-1 flex items-baseline gap-2">
+          <span id="statOutPns" class="text-2xl font-bold font-mono text-[#D71920]">-</span>
+          <span class="text-xs text-slate-500">P/N ที่เคยมีในคลัง</span>
+        </div>
+      </div>
+
+      <div onclick="switchTab('changes')" class="cursor-pointer bg-white hover:bg-amber-50/40 border border-slate-200 border-l-4 border-l-amber-500 rounded-xl p-3.5 shadow-sm transition">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
+          <span>ประวัติการตัดของ (Transaction)</span>
+          <i class="fa-solid fa-right-left text-amber-600"></i>
+        </div>
+        <div class="mt-1 flex items-baseline gap-2">
+          <span id="statTodayChanges" class="text-2xl font-bold font-mono text-amber-600">-</span>
+          <span class="text-xs text-slate-500">วันนี้ (สะสม <span id="statTotalTx" class="font-semibold text-slate-700">0</span>)</span>
+        </div>
+      </div>
+
+      <div class="bg-white border border-slate-200 border-l-4 border-l-sky-500 rounded-xl p-3.5 shadow-sm">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
+          <span>อัปเดตข้อมูลล่าสุด</span>
+          <i class="fa-regular fa-clock text-sky-600"></i>
+        </div>
+        <div id="statLastSync" class="mt-1 text-sm font-mono font-bold text-slate-800 truncate">-</div>
+        <div id="statLastSyncSub" class="text-[11px] text-slate-500 truncate">-</div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="flex items-center justify-between border-b border-slate-200 pb-2 gap-2">
+      <div class="flex items-center gap-2">
+        <button id="tabBtn-search" onclick="switchTab('search')"
+          class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 bg-[#D71920] text-white shadow-sm shadow-red-600/20 cursor-pointer transition">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <span>ค้นหาอะไหล่ (Inventory Search)</span>
+        </button>
+        <button id="tabBtn-changes" onclick="switchTab('changes')"
+          class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 bg-white border border-slate-200 text-slate-600 hover:text-[#D71920] hover:border-red-200 hover:bg-red-50/50 cursor-pointer transition">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+          <span>ประวัติการตัดของ (Transaction History)</span>
+        </button>
+      </div>
+      <div class="text-xs text-slate-500 hidden sm:block">
+        แสดงผล <span id="resultCount" class="font-mono font-bold text-[#D71920]">0</span> P/N
+      </div>
+    </div>
+
+    <!-- ==================== TAB 1: SEARCH ==================== -->
+    <section id="tab-search" class="space-y-4">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-sm">
+        <div class="flex flex-col sm:flex-row gap-3">
+          <!-- Single Omni Search Box -->
+          <div class="relative flex-1">
+            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input id="searchInput" type="text" autofocus
+              placeholder="พิมพ์ค้นหา P/N, Description, Bin, S/N หรือ Batch (พิมพ์บางส่วนก็เจอ)..."
+              oninput="onSearchInput()"
+              class="w-full pl-10 pr-20 py-2.5 rounded-xl bg-slate-50 border border-slate-300 focus:bg-white focus:border-[#D71920] focus:ring-2 focus:ring-red-100 focus:outline-none text-sm text-slate-900 placeholder-slate-400" />
+            <button id="clearSearchBtn" onclick="clearSearch()"
+              class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 text-xs font-semibold rounded-md bg-red-50 hover:bg-red-100 text-[#D71920] cursor-pointer">
+              ล้าง
+            </button>
+          </div>
+
+          <!-- Status Filter Buttons -->
+          <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 self-start sm:self-auto">
+            <button id="filter-all" onclick="setStatusFilter('all')"
+              class="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#D71920] text-white shadow-sm cursor-pointer transition">
+              ทั้งหมด
+            </button>
+            <button id="filter-in" onclick="setStatusFilter('in')"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer transition">
+              🟢 มีของ
+            </button>
+            <button id="filter-out" onclick="setStatusFilter('out')"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer transition">
+              🔴 หมด
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Sort Bar -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-slate-500 font-semibold mr-1 flex items-center gap-1">
+              <i class="fa-solid fa-arrow-down-a-z text-[#D71920]"></i> เรียงลำดับ:
+            </span>
+            <button id="qsort-pn-asc" onclick="setSort('pn', 'asc')"
+              class="qsort-btn px-2.5 py-1 rounded-lg border text-xs font-medium flex items-center gap-1 cursor-pointer transition">
+              <span>P/N: A → Z</span> <i class="fa-solid fa-arrow-up-a-z text-[11px]"></i>
+            </button>
+            <button id="qsort-pn-desc" onclick="setSort('pn', 'desc')"
+              class="qsort-btn px-2.5 py-1 rounded-lg border text-xs font-medium flex items-center gap-1 cursor-pointer transition">
+              <span>P/N: Z → A</span> <i class="fa-solid fa-arrow-down-z-a text-[11px]"></i>
+            </button>
+            <button id="qsort-avbl-desc" onclick="setSort('avbl', 'desc')"
+              class="qsort-btn px-2.5 py-1 rounded-lg border text-xs font-medium flex items-center gap-1 cursor-pointer transition">
+              <span>จำนวน: 100 → 1 (มากไปน้อย)</span> <i class="fa-solid fa-arrow-down-9-1 text-[11px]"></i>
+            </button>
+            <button id="qsort-avbl-asc" onclick="setSort('avbl', 'asc')"
+              class="qsort-btn px-2.5 py-1 rounded-lg border text-xs font-medium flex items-center gap-1 cursor-pointer transition">
+              <span>จำนวน: 1 → 100 (น้อยไปมาก)</span> <i class="fa-solid fa-arrow-up-1-9 text-[11px]"></i>
+            </button>
+            <button id="qsort-bin-asc" onclick="setSort('bin', 'asc')"
+              class="qsort-btn px-2.5 py-1 rounded-lg border text-xs font-medium flex items-center gap-1 cursor-pointer transition">
+              <span>Bin: A → Z</span> <i class="fa-solid fa-arrow-up-a-z text-[11px]"></i>
+            </button>
+            <button id="qsort-description-asc" onclick="setSort('description', 'asc')"
+              class="qsort-btn px-2.5 py-1 rounded-lg border text-xs font-medium flex items-center gap-1 cursor-pointer transition">
+              <span>Description: A → Z</span> <i class="fa-solid fa-arrow-up-a-z text-[11px]"></i>
+            </button>
+          </div>
+          <span class="text-[11px] text-slate-400">💡 กดที่หัวตารางเพื่อสลับเรียง ขึ้น/ลง ได้ทันที</span>
+        </div>
+      </div>
+
+      <!-- Results Table -->
+      <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-red-50/70 border-b border-red-100 text-[11px] font-bold uppercase tracking-wider text-slate-700 select-none">
+                <th onclick="toggleSort('pn')" class="p-3 cursor-pointer hover:bg-red-100/60 hover:text-[#D71920] transition group">
+                  <div class="flex items-center gap-1.5">
+                    <span>Part No. (P/N)</span>
+                    <span id="sortBadge-pn" class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#D71920] text-white">A→Z ▲</span>
+                  </div>
+                </th>
+                <th onclick="toggleSort('description')" class="p-3 cursor-pointer hover:bg-red-100/60 hover:text-[#D71920] transition group">
+                  <div class="flex items-center gap-1.5">
+                    <span>Description</span>
+                    <span id="sortBadge-description" class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-200 text-slate-600">⇅</span>
+                  </div>
+                </th>
+                <th onclick="toggleSort('bin')" class="p-3 cursor-pointer hover:bg-red-100/60 hover:text-[#D71920] transition group">
+                  <div class="flex items-center gap-1.5">
+                    <span>Bin / Batch / S/N</span>
+                    <span id="sortBadge-bin" class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-200 text-slate-600">⇅</span>
+                  </div>
+                </th>
+                <th onclick="toggleSort('avbl')" class="p-3 text-right cursor-pointer hover:bg-red-100/60 hover:text-[#D71920] transition group">
+                  <div class="flex items-center justify-end gap-1.5">
+                    <span>Available</span>
+                    <span id="sortBadge-avbl" class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-200 text-slate-600">⇅</span>
+                  </div>
+                </th>
+                <th onclick="toggleSort('status')" class="p-3 text-center cursor-pointer hover:bg-red-100/60 hover:text-[#D71920] transition group">
+                  <div class="flex items-center justify-center gap-1.5">
+                    <span>สถานะ</span>
+                    <span id="sortBadge-status" class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-200 text-slate-600">⇅</span>
+                  </div>
+                </th>
+                <th class="p-3 text-center">ประวัติ</th>
+              </tr>
+            </thead>
+            <tbody id="resultsTableBody" class="divide-y divide-slate-200 text-xs">
+              <tr>
+                <td colspan="6" class="p-8 text-center text-slate-400">กำลังโหลดข้อมูล...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 2: TRANSACTION HISTORY ==================== -->
+    <section id="tab-changes" class="hidden space-y-4">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <i class="fa-solid fa-file-invoice text-[#D71920]"></i>
+              ประวัติการตัดของและรับเข้าคลัง (eMRO Inventory Transaction History — DM01)
+            </h2>
+            <p class="text-xs text-slate-500">
+              เริ่มบันทึกตั้งแต่วันที่ <span id="txStartDateLabel" class="font-mono font-semibold text-slate-700">-</span> • แสดงรายละเอียดรถ GSE, เลขใบงาน W/O, ผู้เบิก และผู้ตัดจ่าย (แสดงผล <span id="txResultCount" class="font-mono font-bold text-[#D71920]">0</span> รายการ)
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="downloadTransactionsExcel()"
+              class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm cursor-pointer transition">
+              <i class="fa-solid fa-file-excel"></i>
+              <span>Export ประวัติ (Excel)</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3">
+          <div class="relative flex-1">
+            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input id="txSearchInput" type="text"
+              placeholder="ค้นหา P/N, รหัสรถ GSE (เช่น TLM-BU-012), เลขใบงาน W/O, ชื่อ/รหัสผู้เบิก, Bin หรือเลข Transaction..."
+              oninput="onTxSearchInput()"
+              class="w-full pl-10 pr-20 py-2.5 rounded-xl bg-slate-50 border border-slate-300 focus:bg-white focus:border-[#D71920] focus:ring-2 focus:ring-red-100 focus:outline-none text-sm text-slate-900 placeholder-slate-400" />
+            <button id="clearTxSearchBtn" onclick="clearTxSearch()"
+              class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 text-xs font-semibold rounded-md bg-red-50 hover:bg-red-100 text-[#D71920] cursor-pointer">
+              ล้าง
+            </button>
+          </div>
+
+          <!-- Transaction Type Filter -->
+          <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button id="txType-all" onclick="setTxType('all')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#D71920] text-white shadow-sm cursor-pointer">ทั้งหมด</button>
+            <button id="txType-ISSUED" onclick="setTxType('ISSUED')" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">📤 ISSUED (เบิกจ่าย)</button>
+            <button id="txType-RECEIVING" onclick="setTxType('RECEIVING')" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">📥 RECEIVING (รับเข้า)</button>
+          </div>
+
+          <!-- Days Filter -->
+          <div class="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button id="chgDays-0" onclick="loadTransactions(0)" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#D71920] text-white shadow-sm cursor-pointer">ทั้งหมด</button>
+            <button id="chgDays-1" onclick="loadTransactions(1)" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">วันนี้</button>
+            <button id="chgDays-3" onclick="loadTransactions(3)" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">3 วัน</button>
+            <button id="chgDays-7" onclick="loadTransactions(7)" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">7 วัน</button>
+            <button id="chgDays-30" onclick="loadTransactions(30)" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">30 วัน</button>
+            <button id="chgDays-90" onclick="loadTransactions(90)" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">90 วัน</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-red-50/70 border-b border-red-100 text-[11px] font-bold uppercase tracking-wider text-slate-700 select-none">
+                <th onclick="toggleTxSort('tx_datetime')" class="p-3 cursor-pointer hover:bg-red-100/60 hover:text-[#D71920]">
+                  วัน-เวลา <span id="txSort-tx_datetime" class="text-[#D71920] font-mono">▼</span>
+                </th>
+                <th onclick="toggleTxSort('transaction_type')" class="p-3 cursor-pointer hover:bg-red-100/60 hover:text-[#D71920]">
+                  ประเภท <span id="txSort-transaction_type" class="text-slate-400 font-mono">⇅</span>
+                </th>
+                <th onclick="toggleTxSort('pn')" class="p-3 cursor-pointer hover:bg-red-100/60 hover:text-[#D71920]">
+                  Part No. (P/N) / Description <span id="txSort-pn" class="text-slate-400 font-mono">⇅</span>
+                </th>
+                <th onclick="toggleTxSort('qty')" class="p-3 text-right cursor-pointer hover:bg-red-100/60 hover:text-[#D71920]">
+                  จำนวน <span id="txSort-qty" class="text-slate-400 font-mono">⇅</span>
+                </th>
+                <th onclick="toggleTxSort('ac')" class="p-3 cursor-pointer hover:bg-red-100/60 hover:text-[#D71920]">
+                  รถ GSE / เลขใบงาน W/O <span id="txSort-ac" class="text-slate-400 font-mono">⇅</span>
+                </th>
+                <th onclick="toggleTxSort('issued_to')" class="p-3 cursor-pointer hover:bg-red-100/60 hover:text-[#D71920]">
+                  ผู้เบิก (Issued To) <span id="txSort-issued_to" class="text-slate-400 font-mono">⇅</span>
+                </th>
+                <th class="p-3">ผู้ตัดจ่าย (Created By)</th>
+                <th class="p-3">Bin / Batch / Trans No.</th>
+              </tr>
+            </thead>
+            <tbody id="txTableBody" class="divide-y divide-slate-200 text-xs">
+              <tr>
+                <td colspan="8" class="p-8 text-center text-slate-400">ไม่มีรายการประวัติการตัดของ</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Secondary table: Snapshot quantity diff -->
+      <details class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        <summary class="p-3.5 text-xs font-bold text-slate-700 cursor-pointer hover:text-[#D71920] flex items-center justify-between bg-slate-50/70">
+          <span><i class="fa-solid fa-chart-simple text-[#D71920] mr-1.5"></i> การเปลี่ยนแปลงยอดคงเหลือจากการเปรียบเทียบ Snapshot (Avbl Diff Log)</span>
+          <span class="text-[11px] text-slate-500">คลิกเพื่อเปิด/ปิด</span>
+        </summary>
+        <div class="overflow-x-auto border-t border-slate-200">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-red-50/50 border-b border-red-100 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                <th class="p-3">วัน-เวลาที่ตรวจพบ</th>
+                <th class="p-3">ประเภท</th>
+                <th class="p-3">P/N</th>
+                <th class="p-3">Description</th>
+                <th class="p-3">Bin / Batch</th>
+                <th class="p-3 text-right">ยอดเดิม → ยอดใหม่</th>
+              </tr>
+            </thead>
+            <tbody id="changesTableBody" class="divide-y divide-slate-200 text-xs">
+              <tr>
+                <td colspan="6" class="p-6 text-center text-slate-400">ไม่มีรายการเปลี่ยนแปลง</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <!-- ==================== MODAL: ITEM CHANGE HISTORY ==================== -->
+  <div id="historyModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this)closeHistoryModal()">
+    <div class="bg-white border border-slate-200 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="p-4 bg-gradient-to-r from-[#D71920] to-[#B91C1C] text-white flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold flex items-center gap-2">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            ประวัติการตัดของและการเคลื่อนไหว P/N: <span id="histModalPn" class="font-mono bg-white text-[#D71920] px-2 py-0.5 rounded font-extrabold">-</span>
+          </h3>
+        </div>
+        <button onclick="closeHistoryModal()" class="text-white/80 hover:text-white px-2 py-1 cursor-pointer">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+      <div id="histModalBody" class="p-4 overflow-y-auto space-y-4 text-xs bg-slate-50"></div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: PIN PROMPT FOR REFRESH ==================== -->
+  <div id="pinModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this)closePinModal()">
+    <div class="bg-white border border-slate-200 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-lock text-[#D71920]"></i>
+          ยืนยันรหัส PIN เพื่อดึงข้อมูลสดจาก eMRO
+        </h3>
+        <button onclick="closePinModal()" class="text-slate-400 hover:text-slate-700 cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500">
+        ระบบจะสั่งล็อกอิน eMRO และดาวน์โหลดข้อมูล Inventory (DM01) ล่าสุดทันที ใช้เวลาประมาณ 15–30 วินาที
+      </p>
+      <input id="pinInput" type="password" inputmode="numeric" placeholder="กรอกรหัส PIN..."
+        onkeydown="if(event.key==='Enter')submitRefreshPin()"
+        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 focus:bg-white focus:border-[#D71920] focus:ring-2 focus:ring-red-100 focus:outline-none text-center font-mono text-base tracking-widest text-slate-900" />
+      <div id="pinError" class="hidden text-xs text-[#D71920] font-semibold text-center"></div>
+      <div class="flex items-center justify-end gap-2">
+        <button onclick="closePinModal()" class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer">ยกเลิก</button>
+        <button onclick="submitRefreshPin()" class="px-4 py-2 rounded-xl text-xs font-bold bg-[#D71920] hover:bg-red-700 text-white shadow-sm cursor-pointer">
+          <i class="fa-solid fa-rotate mr-1"></i> เริ่มดึงข้อมูล
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== JAVASCRIPT ==================== -->
+  <script>
+    const PIN_REQUIRED = {{ 'true' if pin_required else 'false' }};
+    let currentStatus = 'all';
+    let currentTab = 'search';
+    let searchTimer = null;
+    let txSearchTimer = null;
+    let currentDays = 0;
+    let currentTxType = 'all';
+    let currentTxSortBy = 'tx_datetime';
+    let currentTxSortDir = 'desc';
+    let currentSortBy = 'pn';
+    let currentSortDir = 'asc';
+    let lastSearchItems = [];
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function fmtNum(v) {
+      const n = Number(v || 0);
+      return Number.isInteger(n) ? String(n) : n.toFixed(2);
+    }
+
+    // Universal Clipboard Copy (HTTPS + HTTP LAN IP Fallback + Toast)
+    async function copyText(text, btnElement = null) {
+      if (!text || text === '-') return;
+      text = String(text).trim();
+
+      let target = btnElement;
+      if (!target && typeof window !== 'undefined' && window.event) {
+        target = window.event.currentTarget || window.event.target;
+        if (target && target.closest) {
+          target = target.closest('button') || target.closest('span') || target;
+        }
+      }
+
+      let copied = false;
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        } catch (e) {}
+      }
+
+      if (!copied) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          ta.style.top = '-9999px';
+          ta.style.opacity = '0';
+          ta.setAttribute('readonly', '');
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          ta.setSelectionRange(0, 99999);
+          copied = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch (e) {}
+      }
+
+      if (!copied) {
+        window.prompt('กด Ctrl+C เพื่อคัดลอก:', text);
+      }
+
+      if (target) {
+        if (!target.dataset.origHtml) target.dataset.origHtml = target.innerHTML;
+        const origHtml = target.dataset.origHtml;
+        target.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i> คัดลอกแล้ว`;
+        setTimeout(() => { target.innerHTML = origHtml; }, 1500);
+      }
+
+      showCopyToast(text);
+    }
+
+    function showCopyToast(text) {
+      let toast = document.getElementById('globalCopyToast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'globalCopyToast';
+        toast.className = 'fixed bottom-5 right-5 z-50 bg-[#D71920] border border-red-700 text-white text-xs px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-3 pointer-events-none';
+        document.body.appendChild(toast);
+      }
+      const display = text.length > 35 ? text.substring(0, 32) + '...' : text;
+      toast.innerHTML = `<i class="fa-solid fa-circle-check text-white"></i> <span>คัดลอก <b>${escapeHtml(display)}</b> สำเร็จ!</span>`;
+      toast.classList.remove('opacity-0', 'translate-y-3');
+      toast.classList.add('opacity-100', 'translate-y-0');
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-3');
+      }, 2000);
+    }
+
+    // Tabs
+    function switchTab(tab) {
+      currentTab = tab;
+      ['search', 'changes'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
+        const btn = document.getElementById(`tabBtn-${t}`);
+        if (t === tab) {
+          btn.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 bg-[#D71920] text-white shadow-sm shadow-red-600/20 cursor-pointer transition";
+        } else {
+          btn.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 bg-white border border-slate-200 text-slate-600 hover:text-[#D71920] hover:border-red-200 hover:bg-red-50/50 cursor-pointer transition";
+        }
+      });
+      if (tab === 'changes') {
+        loadTransactions(currentDays);
+        loadChanges(currentDays || 7);
+      }
+    }
+
+    function setStatusFilter(st) {
+      currentStatus = st;
+      ['all', 'in', 'out'].forEach(k => {
+        const btn = document.getElementById(`filter-${k}`);
+        if (k === st) {
+          btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-[#D71920] text-white shadow-sm cursor-pointer transition";
+        } else {
+          btn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer transition";
+        }
+      });
+      if (currentTab !== 'search') switchTab('search');
+      runSearch();
+    }
+
+    function onSearchInput() {
+      const val = document.getElementById('searchInput').value;
+      document.getElementById('clearSearchBtn').classList.toggle('hidden', !val);
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(runSearch, 180);
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('clearSearchBtn').classList.add('hidden');
+      runSearch();
+    }
+
+    function toggleSort(field) {
+      if (currentSortBy === field) {
+        currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSortBy = field;
+        currentSortDir = field === 'avbl' ? 'desc' : 'asc';
+      }
+      updateSortUI();
+      sortAndRenderClient();
+    }
+
+    function setSort(field, dir) {
+      currentSortBy = field;
+      currentSortDir = dir;
+      updateSortUI();
+      sortAndRenderClient();
+    }
+
+    function updateSortUI() {
+      const cols = ['pn', 'description', 'bin', 'avbl', 'status'];
+      cols.forEach(c => {
+        const badge = document.getElementById(`sortBadge-${c}`);
+        if (!badge) return;
+        if (c === currentSortBy) {
+          const isAsc = currentSortDir === 'asc';
+          let label = '';
+          if (c === 'avbl') {
+            label = isAsc ? '1→100 ▲' : '100→1 ▼';
+          } else if (c === 'status') {
+            label = isAsc ? 'มีของ ▲' : 'หมด ▼';
+          } else {
+            label = isAsc ? 'A→Z ▲' : 'Z→A ▼';
+          }
+          badge.className = "px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#D71920] text-white shadow-sm";
+          badge.innerText = label;
+        } else {
+          badge.className = "px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-200 text-slate-600";
+          badge.innerText = '⇅';
+        }
+      });
+
+      document.querySelectorAll('.qsort-btn').forEach(btn => {
+        const activeId = `qsort-${currentSortBy}-${currentSortDir}`;
+        if (btn.id === activeId) {
+          btn.className = "qsort-btn px-2.5 py-1 rounded-lg border border-[#D71920] bg-red-50 text-[#D71920] text-xs font-bold flex items-center gap-1 cursor-pointer transition";
+        } else {
+          btn.className = "qsort-btn px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-red-50/50 text-slate-600 hover:text-[#D71920] text-xs font-medium flex items-center gap-1 cursor-pointer transition";
+        }
+      });
+    }
+
+    function natCompare(a, b) {
+      return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+    }
+
+    function sortAndRenderClient() {
+      const items = [...lastSearchItems];
+      const dir = currentSortDir === 'asc' ? 1 : -1;
+      items.sort((a, b) => {
+        if (currentSortBy === 'avbl') {
+          const diff = (Number(a.total_avbl || 0) - Number(b.total_avbl || 0)) * dir;
+          return diff !== 0 ? diff : natCompare(a.pn, b.pn);
+        }
+        if (currentSortBy === 'description') {
+          const cmp = natCompare(a.description, b.description) * dir;
+          return cmp !== 0 ? cmp : natCompare(a.pn, b.pn);
+        }
+        if (currentSortBy === 'bin') {
+          const binA = (a.rows && a.rows[0] ? a.rows[0].bin : a.last_bin) || '';
+          const binB = (b.rows && b.rows[0] ? b.rows[0].bin : b.last_bin) || '';
+          const cmp = natCompare(binA, binB) * dir;
+          return cmp !== 0 ? cmp : natCompare(a.pn, b.pn);
+        }
+        if (currentSortBy === 'status') {
+          const stA = a.status === 'IN_STOCK' ? 0 : 1;
+          const stB = b.status === 'IN_STOCK' ? 0 : 1;
+          const diff = (stA - stB) * dir;
+          return diff !== 0 ? diff : natCompare(a.pn, b.pn);
+        }
+        return natCompare(a.pn, b.pn) * dir;
+      });
+      renderSearchResults(items);
+    }
+
+    async function runSearch() {
+      const q = document.getElementById('searchInput').value.trim();
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&status=${currentStatus}&sort_by=${currentSortBy}&sort_dir=${currentSortDir}&limit=2000`);
+      const data = await res.json();
+      document.getElementById('resultCount').innerText = data.total;
+      lastSearchItems = data.items || [];
+      updateSortUI();
+      sortAndRenderClient();
+    }
+
+    function renderSearchResults(items) {
+      const tbody = document.getElementById('resultsTableBody');
+      if (!items.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-10 text-center text-slate-400">ไม่พบรายการอะไหล่ที่ตรงกับเงื่อนไข</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = items.map(g => {
+        const isIn = g.status === 'IN_STOCK';
+        const statusBadge = isIn
+          ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+               <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> มีของ
+             </span>`
+          : `<div class="space-y-1 text-center">
+               <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-50 text-[#D71920] border border-red-200">
+                 <span class="w-1.5 h-1.5 rounded-full bg-[#D71920]"></span> หมด (0)
+               </span>
+               <div class="text-[10px] text-red-600/80 font-mono">หมดตั้งแต่: ${escapeHtml(g.out_since || '-')}</div>
+             </div>`;
+
+        let binHtml = '';
+        if (isIn) {
+          binHtml = g.rows.map(r => `
+            <div class="flex flex-wrap items-center gap-1.5 py-0.5">
+              <span onclick="copyText('${escapeHtml(r.bin)}', this)" title="คลิกเพื่อคัดลอก Bin"
+                class="px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 font-mono font-semibold cursor-pointer hover:bg-sky-100 transition">
+                Bin: ${escapeHtml(r.bin || '-')}
+              </span>
+              ${r.batch ? `<span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 font-mono text-[11px]">Batch: ${escapeHtml(r.batch)}</span>` : ''}
+              ${r.sn ? `<span onclick="copyText('${escapeHtml(r.sn)}', this)" class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-mono text-[11px] cursor-pointer">S/N: ${escapeHtml(r.sn)}</span>` : ''}
+              ${g.rows.length > 1 ? `<span class="text-emerald-600 font-mono font-bold text-[11px]">(${fmtNum(r.avbl)} ${escapeHtml(r.uom || '')})</span>` : ''}
+            </div>
+          `).join('');
+        } else {
+          binHtml = `
+            <div class="text-slate-600 font-mono text-xs">
+              <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                Bin ล่าสุด: ${escapeHtml(g.last_bin || '-')}
+              </span>
+            </div>
+          `;
+        }
+
+        return `
+          <tr class="hover:bg-red-50/40 transition align-top ${!isIn ? 'bg-red-50/25' : 'bg-white'}">
+            <td class="p-3 whitespace-nowrap">
+              <div class="flex items-center gap-2">
+                <span onclick="copyText('${escapeHtml(g.pn)}', this)" title="คลิกเพื่อคัดลอก P/N"
+                  class="font-mono font-bold text-sm text-slate-900 hover:text-[#D71920] cursor-pointer transition">
+                  ${escapeHtml(g.pn)}
+                </span>
+                <button onclick="copyText('${escapeHtml(g.pn)}', this)" title="คัดลอก P/N"
+                  class="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-[#D71920] border border-slate-200 text-[11px] cursor-pointer transition">
+                  <i class="fa-regular fa-copy"></i>
+                </button>
+              </div>
+              <div class="text-[10px] font-mono text-slate-400 mt-0.5">${escapeHtml(g.location)}</div>
+            </td>
+            <td class="p-3 text-slate-700 max-w-md whitespace-pre-line leading-relaxed">${escapeHtml(g.description || '-')}</td>
+            <td class="p-3">${binHtml}</td>
+            <td class="p-3 text-right whitespace-nowrap font-mono">
+              <div class="text-base font-bold ${isIn ? 'text-emerald-600' : 'text-[#D71920]'}">
+                ${fmtNum(g.total_avbl)} <span class="text-xs font-normal text-slate-500">${escapeHtml(g.uom || '')}</span>
+              </div>
+              ${g.total_rsvd > 0 ? `<div class="text-[11px] text-amber-600">Rsvd: ${fmtNum(g.total_rsvd)}</div>` : ''}
+            </td>
+            <td class="p-3 text-center whitespace-nowrap">${statusBadge}</td>
+            <td class="p-3 text-center whitespace-nowrap">
+              <button onclick="openHistoryModal('${escapeHtml(g.location)}', '${escapeHtml(g.pn)}')"
+                class="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-[#D71920] text-[#D71920] hover:text-white border border-red-200 text-xs font-semibold cursor-pointer transition">
+                <i class="fa-solid fa-clock-rotate-left mr-1"></i> ดูประวัติ
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // ==================== TRANSACTION HISTORY (Tab 2) ====================
+    function onTxSearchInput() {
+      const val = document.getElementById('txSearchInput').value;
+      document.getElementById('clearTxSearchBtn').classList.toggle('hidden', !val);
+      clearTimeout(txSearchTimer);
+      txSearchTimer = setTimeout(() => loadTransactions(currentDays), 180);
+    }
+
+    function clearTxSearch() {
+      document.getElementById('txSearchInput').value = '';
+      document.getElementById('clearTxSearchBtn').classList.add('hidden');
+      loadTransactions(currentDays);
+    }
+
+    function setTxType(t) {
+      currentTxType = t;
+      ['all', 'ISSUED', 'RECEIVING'].forEach(k => {
+        const btn = document.getElementById(`txType-${k}`);
+        if (!btn) return;
+        btn.className = k === t
+          ? "px-3 py-1.5 rounded-lg text-xs font-bold bg-[#D71920] text-white shadow-sm cursor-pointer"
+          : "px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer";
+      });
+      loadTransactions(currentDays);
+    }
+
+    function toggleTxSort(field) {
+      if (currentTxSortBy === field) {
+        currentTxSortDir = currentTxSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentTxSortBy = field;
+        currentTxSortDir = (field === 'tx_datetime' || field === 'qty') ? 'desc' : 'asc';
+      }
+      ['tx_datetime', 'transaction_type', 'pn', 'qty', 'ac', 'issued_to'].forEach(col => {
+        const el = document.getElementById(`txSort-${col}`);
+        if (!el) return;
+        if (col === currentTxSortBy) {
+          el.className = "text-[#D71920] font-mono font-bold";
+          el.innerText = currentTxSortDir === 'asc' ? '▲' : '▼';
+        } else {
+          el.className = "text-slate-400 font-mono";
+          el.innerText = '⇅';
+        }
+      });
+      loadTransactions(currentDays);
+    }
+
+    function formatTxTypeBadge(txType) {
+      const t = String(txType || '').toUpperCase();
+      if (t.includes('ISSUED')) {
+        return `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-red-50 text-[#D71920] border border-red-200">📤 ${escapeHtml(txType)}</span>`;
+      }
+      if (t.includes('RECEIV')) {
+        return `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">📥 ${escapeHtml(txType)}</span>`;
+      }
+      if (t.includes('RTS') || t.includes('RETURN')) {
+        return `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200">↩️ ${escapeHtml(txType)}</span>`;
+      }
+      return `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">🔄 ${escapeHtml(txType || '-')}</span>`;
+    }
+
+    async function loadTransactions(days = 0) {
+      currentDays = days;
+      [0, 1, 3, 7, 30, 90].forEach(d => {
+        const b = document.getElementById(`chgDays-${d}`);
+        if (b) {
+          b.className = d === days
+            ? "px-3 py-1.5 rounded-lg text-xs font-bold bg-[#D71920] text-white shadow-sm cursor-pointer"
+            : "px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer";
+        }
+      });
+      const q = (document.getElementById('txSearchInput')?.value || '').trim();
+      const url = `/api/transactions?q=${encodeURIComponent(q)}&tx_type=${encodeURIComponent(currentTxType)}&days=${days}&sort_by=${currentTxSortBy}&sort_dir=${currentTxSortDir}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const items = data.items || [];
+      document.getElementById('txResultCount').innerText = data.total ?? items.length;
+      const tbody = document.getElementById('txTableBody');
+      if (!items.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="p-10 text-center text-slate-400">
+              ยังไม่มีรายการประวัติการตัดของที่ตรงกับเงื่อนไข
+            </td>
+          </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = items.map(r => {
+        const isIssue = String(r.transaction_type || '').toUpperCase().includes('ISSUED');
+        const qtyColor = isIssue ? 'text-[#D71920]' : 'text-emerald-600';
+        const qtyPrefix = isIssue ? '-' : '+';
+        const issuedStr = (r.issued_to || r.issued_to_name)
+          ? `<div class="font-semibold text-slate-800">${escapeHtml(r.issued_to_name || '-')}</div>
+             <div class="text-[11px] font-mono text-slate-500">${escapeHtml(r.issued_to || '')}</div>`
+          : `<span class="text-slate-400">-</span>`;
+        const createdStr = (r.created_by || r.created_name)
+          ? `<div class="text-slate-800">${escapeHtml(r.created_name || '-')}</div>
+             <div class="text-[11px] font-mono text-slate-500">${escapeHtml(r.created_by || '')}</div>`
+          : `<span class="text-slate-400">-</span>`;
+
+        return `
+          <tr class="bg-white hover:bg-red-50/40 transition align-top">
+            <td class="p-3 font-mono text-slate-600 whitespace-nowrap">
+              <div>${escapeHtml(r.created_date || r.tx_datetime || '-')}</div>
+            </td>
+            <td class="p-3 whitespace-nowrap">${formatTxTypeBadge(r.transaction_type)}</td>
+            <td class="p-3">
+              <div class="flex items-center gap-1.5">
+                <span onclick="copyText('${escapeHtml(r.pn)}', this)" class="font-mono font-bold text-slate-900 hover:text-[#D71920] cursor-pointer">${escapeHtml(r.pn)}</span>
+                <button onclick="copyText('${escapeHtml(r.pn)}', this)" class="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-[#D71920] border border-slate-200 text-[10px] cursor-pointer"><i class="fa-regular fa-copy"></i></button>
+              </div>
+              <div class="text-slate-500 text-[11px] max-w-xs truncate mt-0.5">${escapeHtml(r.description || '-')}</div>
+            </td>
+            <td class="p-3 text-right font-mono whitespace-nowrap">
+              <span class="text-sm font-bold ${qtyColor}">${qtyPrefix}${fmtNum(r.qty)}</span>
+              <span class="text-[11px] text-slate-500">${escapeHtml(r.uom || '')}</span>
+            </td>
+            <td class="p-3 whitespace-nowrap font-mono">
+              ${r.ac && r.ac !== '-' ? `<div class="text-[#D71920] font-bold"><i class="fa-solid fa-truck-pickup mr-1 text-[10px]"></i>${escapeHtml(r.ac)}</div>` : '<div class="text-slate-400">-</div>'}
+              ${r.wo_so && r.wo_so !== '-' ? `<div class="text-[11px] text-sky-700 font-semibold">W/O: <span onclick="copyText('${escapeHtml(r.wo_so)}', this)" class="cursor-pointer hover:underline">${escapeHtml(r.wo_so)}</span></div>` : ''}
+            </td>
+            <td class="p-3 whitespace-nowrap">${issuedStr}</td>
+            <td class="p-3 whitespace-nowrap">${createdStr}</td>
+            <td class="p-3 font-mono text-[11px] text-slate-600 whitespace-nowrap">
+              <div>Bin: <span class="text-sky-700 font-bold">${escapeHtml(r.bin || '-')}</span> ${r.batch && r.batch !== '-' ? `(Batch: ${escapeHtml(r.batch)})` : ''}</div>
+              <div class="text-slate-400">Tx#: <span onclick="copyText('${escapeHtml(r.transaction_no)}', this)" class="cursor-pointer hover:text-[#D71920]">${escapeHtml(r.transaction_no)}</span></div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function downloadTransactionsExcel() {
+      const q = (document.getElementById('txSearchInput')?.value || '').trim();
+      window.location.href = `/api/export-transactions.xlsx?q=${encodeURIComponent(q)}&tx_type=${encodeURIComponent(currentTxType)}&days=${currentDays}&sort_by=${currentTxSortBy}&sort_dir=${currentTxSortDir}`;
+    }
+
+    // Secondary table: Snapshot Diff Movements
+    async function loadChanges(days = 7) {
+      const res = await fetch(`/api/changes?days=${days || 7}`);
+      const data = await res.json();
+      const tbody = document.getElementById('changesTableBody');
+      const items = data.items || [];
+      if (!items.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">ยังไม่มีการเปลี่ยนแปลงจำนวนอะไหล่จากการเปรียบเทียบ Snapshot</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = items.map(c => {
+        let badge = '';
+        if (c.event === 'OUT') {
+          badge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-red-50 text-[#D71920] border border-red-200">🔴 ของหมด</span>`;
+        } else if (c.event === 'NEW') {
+          badge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">🟢 รายการเข้าใหม่</span>`;
+        } else if (c.event === 'BACK') {
+          badge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200">🔵 ของเข้าสต็อก</span>`;
+        } else {
+          const diff = Number(c.new_value || 0) - Number(c.old_value || 0);
+          badge = diff < 0
+            ? `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">📉 เบิกออก (${diff})</span>`
+            : `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">📈 รับเพิ่ม (+${diff})</span>`;
+        }
+        return `
+          <tr class="bg-white hover:bg-red-50/40 transition">
+            <td class="p-3 font-mono text-slate-500 whitespace-nowrap">${escapeHtml(c.changed_at)}</td>
+            <td class="p-3 whitespace-nowrap">${badge}</td>
+            <td class="p-3 font-mono font-bold text-slate-900 whitespace-nowrap">
+              <span onclick="copyText('${escapeHtml(c.pn)}', this)" class="cursor-pointer hover:text-[#D71920]">${escapeHtml(c.pn)}</span>
+            </td>
+            <td class="p-3 text-slate-700 max-w-md truncate">${escapeHtml(c.description || '-')}</td>
+            <td class="p-3 font-mono text-slate-600 whitespace-nowrap">Bin: ${escapeHtml(c.bin || '-')} ${c.batch ? `(Batch: ${escapeHtml(c.batch)})` : ''}</td>
+            <td class="p-3 text-right font-mono whitespace-nowrap">
+              <span class="text-slate-400">${escapeHtml(c.old_value || '0')}</span>
+              <i class="fa-solid fa-arrow-right mx-1.5 text-slate-400 text-[10px]"></i>
+              <span class="font-bold text-slate-900">${escapeHtml(c.new_value || '0')}</span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // History Modal (Shows both eMRO Transaction History & Snapshot Diff Log for a P/N)
+    async function openHistoryModal(location, pn) {
+      document.getElementById('histModalPn').innerText = pn;
+      document.getElementById('historyModal').classList.remove('hidden');
+      const body = document.getElementById('histModalBody');
+      body.innerHTML = `<div class="p-6 text-center text-slate-500">กำลังโหลดประวัติ...</div>`;
+      const res = await fetch(`/api/item-history?location=${encodeURIComponent(location)}&pn=${encodeURIComponent(pn)}`);
+      const data = await res.json();
+      const txs = data.transactions || [];
+      const items = data.items || [];
+
+      if (!txs.length && !items.length) {
+        body.innerHTML = `<div class="p-6 text-center text-slate-400">ยังไม่มีประวัติการตัดของหรือการเปลี่ยนแปลงของ P/N นี้</div>`;
+        return;
+      }
+
+      let html = '';
+
+      // Section 1: Exact eMRO Transaction History
+      html += `
+        <div class="space-y-2">
+          <div class="text-xs font-bold text-[#D71920] flex items-center justify-between">
+            <span><i class="fa-solid fa-file-invoice mr-1.5"></i> ประวัติการตัดของจาก eMRO (Inventory Transaction History)</span>
+            <span class="font-mono text-[11px] text-slate-500">${txs.length} รายการ</span>
+          </div>
+      `;
+      if (!txs.length) {
+        html += `<div class="p-4 rounded-xl bg-white border border-slate-200 text-center text-slate-400">ยังไม่มีรายการตัดเบิกใน eMRO</div>`;
+      } else {
+        html += `<div class="space-y-2">` + txs.map(r => {
+          const isIssue = String(r.transaction_type || '').toUpperCase().includes('ISSUED');
+          const qtyColor = isIssue ? 'text-[#D71920]' : 'text-emerald-600';
+          const qtyPrefix = isIssue ? '-' : '+';
+          return `
+            <div class="p-3 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  ${formatTxTypeBadge(r.transaction_type)}
+                  <span class="font-mono text-slate-700 font-semibold text-xs">${escapeHtml(r.created_date || r.tx_datetime)}</span>
+                  <span class="font-mono text-[11px] text-slate-400">Tx#: ${escapeHtml(r.transaction_no)}</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                  <span>Bin: <b class="font-mono text-sky-700">${escapeHtml(r.bin || '-')}</b> ${r.batch && r.batch !== '-' ? `(Batch: ${escapeHtml(r.batch)})` : ''}</span>
+                  ${r.ac && r.ac !== '-' ? `<span>รถ GSE: <b class="font-mono text-[#D71920]">${escapeHtml(r.ac)}</b></span>` : ''}
+                  ${r.wo_so && r.wo_so !== '-' ? `<span>W/O: <b class="font-mono text-sky-700">${escapeHtml(r.wo_so)}</b></span>` : ''}
+                </div>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                  ${(r.issued_to || r.issued_to_name) ? `<span>ผู้เบิก: <b class="text-slate-800">${escapeHtml(r.issued_to_name || '')}</b> (${escapeHtml(r.issued_to || '-')})</span>` : ''}
+                  ${(r.created_by || r.created_name) ? `<span>ผู้ตัดจ่าย: <b class="text-slate-800">${escapeHtml(r.created_name || '')}</b> (${escapeHtml(r.created_by || '-')})</span>` : ''}
+                </div>
+              </div>
+              <div class="font-mono text-right whitespace-nowrap">
+                <div class="text-base font-bold ${qtyColor}">${qtyPrefix}${fmtNum(r.qty)} <span class="text-xs font-normal text-slate-500">${escapeHtml(r.uom || '')}</span></div>
+              </div>
+            </div>
+          `;
+        }).join('') + `</div>`;
+      }
+      html += `</div>`;
+
+      // Section 2: Snapshot Diff Log
+      if (items.length) {
+        html += `
+          <div class="space-y-2 pt-2 border-t border-slate-200">
+            <div class="text-xs font-bold text-slate-700 flex items-center justify-between">
+              <span><i class="fa-solid fa-chart-simple text-sky-600 mr-1.5"></i> ประวัติการเปลี่ยนแปลงยอดคงเหลือ (Snapshot Diff)</span>
+              <span class="font-mono text-[11px] text-slate-500">${items.length} รายการ</span>
+            </div>
+            <div class="space-y-2">
+              ${items.map(c => `
+                <div class="p-3 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-between gap-2">
+                  <div>
+                    <div class="font-mono text-slate-500 text-[11px]">${escapeHtml(c.changed_at)} • Bin: ${escapeHtml(c.bin || '-')} ${c.batch ? `• Batch: ${escapeHtml(c.batch)}` : ''}</div>
+                    <div class="text-slate-800 mt-0.5 font-semibold">${escapeHtml(c.event)} (${escapeHtml(c.field || 'avbl')})</div>
+                  </div>
+                  <div class="font-mono text-sm">
+                    <span class="text-slate-400">${escapeHtml(c.old_value || '0')}</span>
+                    <i class="fa-solid fa-arrow-right mx-1 text-slate-400 text-xs"></i>
+                    <span class="font-bold text-emerald-600">${escapeHtml(c.new_value || '0')}</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      body.innerHTML = html;
+    }
+
+    function closeHistoryModal() {
+      document.getElementById('historyModal').classList.add('hidden');
+    }
+
+    // PIN Modal & Refresh
+    function openPinModal() {
+      if (!PIN_REQUIRED) {
+        triggerRefresh('');
+        return;
+      }
+      document.getElementById('pinError').classList.add('hidden');
+      document.getElementById('pinInput').value = '';
+      document.getElementById('pinModal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('pinInput').focus(), 50);
+    }
+
+    function closePinModal() {
+      document.getElementById('pinModal').classList.add('hidden');
+    }
+
+    async function submitRefreshPin() {
+      const pin = document.getElementById('pinInput').value.trim();
+      await triggerRefresh(pin);
+    }
+
+    async function triggerRefresh(pin) {
+      const res = await fetch('/api/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        const errEl = document.getElementById('pinError');
+        errEl.innerText = data.error || 'เกิดข้อผิดพลาด';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      closePinModal();
+      pollStatus();
+    }
+
+    function downloadExcel() {
+      const q = document.getElementById('searchInput').value.trim();
+      window.location.href = `/api/export.xlsx?q=${encodeURIComponent(q)}&status=${currentStatus}&sort_by=${currentSortBy}&sort_dir=${currentSortDir}`;
+    }
+
+    let wasRunning = false;
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        const counts = data.counts || {};
+        document.getElementById('statInPns').innerText = counts.in_pns ?? 0;
+        document.getElementById('statInRows').innerText = counts.in_rows ?? 0;
+        document.getElementById('statOutPns').innerText = counts.out_pns ?? 0;
+        document.getElementById('statTodayChanges').innerText = counts.tx_today ?? counts.today_changes ?? 0;
+        const totalTxEl = document.getElementById('statTotalTx');
+        if (totalTxEl) totalTxEl.innerText = counts.tx_total ?? 0;
+        const startLbl = document.getElementById('txStartDateLabel');
+        if (startLbl && data.tx_start_date) startLbl.innerText = data.tx_start_date;
+
+        const lastOk = data.last_ok;
+        if (lastOk) {
+          document.getElementById('statLastSync').innerText = lastOk.finished_at || lastOk.started_at || '-';
+          document.getElementById('statLastSyncSub').innerText = `วิธี: ${lastOk.method || 'export'} • ${lastOk.row_count || 0} แถว`;
+        }
+
+        const sync = data.sync || {};
+        const banner = document.getElementById('syncBanner');
+        const icon = document.getElementById('refreshIcon');
+        const btnText = document.getElementById('refreshBtnText');
+        if (sync.running) {
+          wasRunning = true;
+          banner.classList.remove('hidden');
+          document.getElementById('syncProgressText').innerText = sync.progress || 'กำลังดึงข้อมูล...';
+          icon.classList.add('fa-spin');
+          btnText.innerText = 'กำลังซิงก์...';
+        } else {
+          banner.classList.add('hidden');
+          icon.classList.remove('fa-spin');
+          btnText.innerText = 'Refresh ตอนนี้';
+          if (wasRunning) {
+            wasRunning = false;
+            runSearch();
+            if (currentTab === 'changes') {
+              loadTransactions(currentDays);
+              loadChanges(currentDays || 7);
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Initial load
+    runSearch();
+    pollStatus();
+    setInterval(pollStatus, 3000);
+  </script>
+</body>
+</html>
