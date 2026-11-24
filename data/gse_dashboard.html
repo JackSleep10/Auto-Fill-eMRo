@@ -784,7 +784,7 @@
 
     </div>
 
-    <!-- ==================== TAB 6: INVENTORY TRANSACTION MONITOR ==================== -->
+    <!-- ==================== TAB 6: INVENTORY SEARCH & HISTORY ==================== -->
     <div id="tab-inventory" class="hidden space-y-5">
 
       <!-- Heading & Actions -->
@@ -792,38 +792,37 @@
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
             <h1 class="text-xl sm:text-[22px] font-semibold text-zinc-100 tracking-tight leading-snug">
-              Inventory Transaction Monitor
+              ค้นหาคลังอะไหล่ (Inventory Search)
             </h1>
             <span id="invLocationBadge" class="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 inline-flex items-center gap-1.5">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
               <span id="invLocationBadgeText">DM01</span>
             </span>
           </div>
-          <p class="text-xs text-zinc-400 mt-1" id="invSyncMeta">ดึงข้อมูลจาก eMRO Inventory Transaction History Query &amp; Live Transactions</p>
+          <p class="text-xs text-zinc-400 mt-1" id="invSyncMeta">ค้นหา Part No / Description / Bin / S/N และประวัติการตัดเบิก • ซิงก์อัตโนมัติทุก 30 นาที (06:00–22:00)</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-          <div class="flex items-center bg-[#111113] border border-zinc-800 rounded-lg px-2.5 py-1.5 gap-1.5">
-            <span class="text-[11px] text-zinc-500 font-mono">LOC</span>
-            <input type="text" id="invLocationInput" value="DM01" maxlength="12"
-                   class="w-16 bg-transparent text-xs font-mono font-semibold text-zinc-100 uppercase focus:outline-none">
-          </div>
-          <button type="button" onclick="fetchInventoryData(true)" id="invRefreshBtn"
-                  class="px-3 py-2 rounded-lg text-xs font-medium bg-[#111113] hover:bg-zinc-800 text-zinc-200 border border-zinc-800 transition flex items-center justify-center gap-1.5 cursor-pointer">
-            <i class="fa-solid fa-arrows-rotate text-[11px]" id="invRefreshIcon"></i>
-            <span>รีเฟรช</span>
-          </button>
-          <button type="button" onclick="syncInventoryFromEmro()" id="invSyncEmroBtn"
-                  class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white transition flex items-center justify-center gap-1.5 cursor-pointer">
-            <i class="fa-solid fa-cloud-arrow-down text-[11px]" id="invSyncEmroIcon"></i>
-            <span id="invSyncEmroText">ดึงสดจาก eMRO</span>
-          </button>
-          <button type="button" onclick="exportInventoryExcel()" id="invExportBtn"
+          <button type="button" onclick="downloadInvExcel()" id="invExportBtn"
                   class="px-3 py-2 rounded-lg text-xs font-medium bg-zinc-100 hover:bg-white text-zinc-950 transition flex items-center justify-center gap-1.5 cursor-pointer">
             <i class="fa-regular fa-file-excel text-[11px] text-emerald-700"></i>
             <span>Export Excel</span>
           </button>
+          <button type="button" onclick="openInvPinModal()" id="invRefreshNowBtn"
+                  class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white transition flex items-center justify-center gap-1.5 cursor-pointer">
+            <i class="fa-solid fa-rotate text-[11px]" id="invRefreshNowIcon"></i>
+            <span id="invRefreshNowText">Refresh ตอนนี้</span>
+          </button>
         </div>
+      </div>
+
+      <!-- Live Sync Progress Banner -->
+      <div id="invSyncBanner" class="hidden rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0">
+          <i class="fa-solid fa-circle-notch fa-spin text-amber-400 flex-shrink-0"></i>
+          <span id="invSyncProgressText" class="truncate">กำลังดึงข้อมูลล่าสุดจาก eMRO...</span>
+        </div>
+        <span class="font-mono text-[11px] text-amber-300/80 hidden sm:inline flex-shrink-0">ทำงานเบื้องหลัง ค้นหาข้อมูลเดิมได้ตามปกติ</span>
       </div>
 
       <!-- Status / Error Banner -->
@@ -832,198 +831,370 @@
           <i id="invStatusBannerIcon" class="fa-solid fa-circle-info mt-0.5 flex-shrink-0"></i>
           <div id="invStatusBannerText" class="break-words leading-relaxed"></div>
         </div>
-        <button type="button" onclick="hideInventoryBanner()" class="text-zinc-400 hover:text-white flex-shrink-0 cursor-pointer" title="ปิด">
+        <button type="button" onclick="hideInvBanner()" class="text-zinc-400 hover:text-white flex-shrink-0 cursor-pointer" title="ปิด">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
 
       <!-- 4-Column KPI Summary Strip -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <button type="button" onclick="setInventoryFilterType('ALL')" class="text-left bg-[#111113] border border-zinc-800/80 hover:border-zinc-700 rounded-xl p-4 flex items-center justify-between gap-3 transition cursor-pointer">
-          <div class="min-w-0">
-            <div class="text-xs text-zinc-400">รายการทั้งหมด</div>
-            <div class="text-xl font-semibold font-mono text-zinc-100 mt-1" id="invKpiTotal">0</div>
-          </div>
-          <i class="fa-solid fa-boxes-stacked text-zinc-600 text-base"></i>
-        </button>
-
-        <button type="button" onclick="setInventoryFilterType('ISSUED')" class="text-left bg-[#111113] border border-zinc-800/80 hover:border-amber-500/40 rounded-xl p-4 flex items-center justify-between gap-3 transition cursor-pointer">
+        <button type="button" onclick="setInvStatusFilter('in')" class="text-left bg-[#111113] border border-zinc-800/80 hover:border-emerald-500/40 rounded-xl p-4 flex items-center justify-between gap-3 transition cursor-pointer">
           <div class="min-w-0">
             <div class="text-xs text-zinc-400 flex items-center gap-1.5">
-              <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> เบิกจ่าย (ISSUED)
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> มีของ (In Stock)
             </div>
-            <div class="text-xl font-semibold font-mono text-amber-400 mt-1" id="invKpiIssued">0</div>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span class="text-xl font-semibold font-mono text-emerald-400" id="invStatInPns">-</span>
+              <span class="text-[11px] text-zinc-500">P/N (<span id="invStatInRows" class="font-mono text-zinc-300">-</span>)</span>
+            </div>
           </div>
-          <i class="fa-solid fa-arrow-up-from-bracket text-zinc-600 text-base"></i>
+          <i class="fa-solid fa-circle-check text-zinc-600 text-base"></i>
         </button>
 
-        <button type="button" onclick="setInventoryFilterType('RECEIVING')" class="text-left bg-[#111113] border border-zinc-800/80 hover:border-emerald-500/40 rounded-xl p-4 flex items-center justify-between gap-3 transition cursor-pointer">
+        <button type="button" onclick="setInvStatusFilter('out')" class="text-left bg-[#111113] border border-zinc-800/80 hover:border-rose-500/40 rounded-xl p-4 flex items-center justify-between gap-3 transition cursor-pointer">
           <div class="min-w-0">
             <div class="text-xs text-zinc-400 flex items-center gap-1.5">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> รับเข้า (RECEIVING)
+              <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> ของหมด (Out of Stock)
             </div>
-            <div class="text-xl font-semibold font-mono text-emerald-400 mt-1" id="invKpiReceiving">0</div>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span class="text-xl font-semibold font-mono text-rose-400" id="invStatOutPns">-</span>
+              <span class="text-[11px] text-zinc-500 truncate">P/N ที่เคยมี</span>
+            </div>
           </div>
-          <i class="fa-solid fa-arrow-down-to-bracket text-zinc-600 text-base"></i>
+          <i class="fa-solid fa-triangle-exclamation text-zinc-600 text-base"></i>
         </button>
 
-        <button type="button" onclick="setInventoryFilterType('TRANSFER')" class="text-left bg-[#111113] border border-zinc-800/80 hover:border-sky-500/40 rounded-xl p-4 flex items-center justify-between gap-3 transition cursor-pointer">
+        <button type="button" onclick="switchInvSubTab('tx')" class="text-left bg-[#111113] border border-zinc-800/80 hover:border-amber-500/40 rounded-xl p-4 flex items-center justify-between gap-3 transition cursor-pointer">
           <div class="min-w-0">
             <div class="text-xs text-zinc-400 flex items-center gap-1.5">
-              <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span> ย้าย / คืน (TRANSFER/RTS)
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> ประวัติตัดเบิก (Tx)
             </div>
-            <div class="text-xl font-semibold font-mono text-sky-400 mt-1" id="invKpiTransfer">0</div>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span class="text-xl font-semibold font-mono text-amber-400" id="invStatTodayTx">-</span>
+              <span class="text-[11px] text-zinc-500 truncate">วันนี้ (สะสม <span id="invStatTotalTx" class="font-mono text-zinc-300">0</span>)</span>
+            </div>
           </div>
           <i class="fa-solid fa-right-left text-zinc-600 text-base"></i>
         </button>
-      </div>
 
-      <!-- Filter Pills, Search & View Mode Switcher -->
-      <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
-        <div class="flex flex-wrap items-center gap-1.5 text-xs">
-          <button type="button" onclick="setInventoryFilterType('ALL')" id="invFilter-ALL"
-                  class="inv-filter-pill px-3 py-1.5 rounded-lg bg-zinc-100 text-zinc-950 font-semibold transition cursor-pointer">
-            ทั้งหมด (<span id="invPillAllCount">0</span>)
-          </button>
-          <button type="button" onclick="setInventoryFilterType('ISSUED')" id="invFilter-ISSUED"
-                  class="inv-filter-pill px-3 py-1.5 rounded-lg bg-[#111113] hover:bg-zinc-800 text-zinc-300 border border-zinc-800 font-medium transition flex items-center gap-1.5 cursor-pointer">
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> ISSUED (<span id="invPillIssuedCount">0</span>)
-          </button>
-          <button type="button" onclick="setInventoryFilterType('RECEIVING')" id="invFilter-RECEIVING"
-                  class="inv-filter-pill px-3 py-1.5 rounded-lg bg-[#111113] hover:bg-zinc-800 text-zinc-300 border border-zinc-800 font-medium transition flex items-center gap-1.5 cursor-pointer">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> RECEIVING (<span id="invPillReceivingCount">0</span>)
-          </button>
-          <button type="button" onclick="setInventoryFilterType('TRANSFER')" id="invFilter-TRANSFER"
-                  class="inv-filter-pill px-3 py-1.5 rounded-lg bg-[#111113] hover:bg-zinc-800 text-zinc-300 border border-zinc-800 font-medium transition flex items-center gap-1.5 cursor-pointer">
-            <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span> TRANSFER (<span id="invPillTransferCount">0</span>)
-          </button>
-          <button type="button" onclick="setInventoryFilterType('RTS')" id="invFilter-RTS"
-                  class="inv-filter-pill px-3 py-1.5 rounded-lg bg-[#111113] hover:bg-zinc-800 text-zinc-300 border border-zinc-800 font-medium transition flex items-center gap-1.5 cursor-pointer">
-            <span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span> RTS/WO (<span id="invPillRtsCount">0</span>)
-          </button>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <div class="relative flex-1 md:w-80">
-            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
-              <i class="fa-solid fa-magnifying-glass text-xs"></i>
-            </span>
-            <input type="text" id="invSearchInput" oninput="applyInventoryFilters()"
-                   placeholder="ค้นหา P/N, S/N, W/O, A/C, Batch, Bin, ผู้เบิก..."
-                   class="w-full bg-[#111113] border border-zinc-800 rounded-lg pl-8 pr-8 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 font-mono transition">
-            <button type="button" id="invClearSearchBtn" onclick="clearInventorySearch()" class="hidden absolute inset-y-0 right-0 pr-2.5 flex items-center text-zinc-500 hover:text-zinc-200 cursor-pointer" title="ล้างคำค้นหา">
-              <i class="fa-solid fa-circle-xmark text-xs"></i>
-            </button>
+        <div class="bg-[#111113] border border-zinc-800/80 rounded-xl p-4 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-xs text-zinc-400">อัปเดตล่าสุด</div>
+            <div class="text-xs font-semibold font-mono text-zinc-100 mt-1.5 truncate" id="invStatLastSync">-</div>
+            <div class="text-[11px] text-zinc-500 truncate mt-0.5" id="invStatLastSyncSub">-</div>
           </div>
-
-          <div class="inline-flex rounded-lg bg-[#111113] p-0.5 border border-zinc-800/80 flex-shrink-0">
-            <button type="button" onclick="setInventoryViewMode('card')" id="btnInvViewCard" class="px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition text-zinc-400 hover:text-zinc-200 cursor-pointer">
-              <i class="fa-solid fa-grip text-[11px]"></i>
-            </button>
-            <button type="button" onclick="setInventoryViewMode('table')" id="btnInvViewTable" class="px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition bg-zinc-800 text-white cursor-pointer">
-              <i class="fa-solid fa-table-list text-[11px]"></i>
-            </button>
-          </div>
+          <i class="fa-regular fa-clock text-zinc-600 text-base flex-shrink-0"></i>
         </div>
       </div>
 
-      <div class="flex items-center justify-between gap-2 text-xs text-zinc-400">
-        <span id="invResultCountLabel">กำลังโหลดข้อมูล Inventory...</span>
-        <span class="text-[11px] text-zinc-500 hidden sm:inline">คลิกที่ P/N หรือ W/O เพื่อคัดลอก</span>
+      <!-- Sub-Tab Bar -->
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-zinc-800/80">
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="invSubBtn-search" onclick="switchInvSubTab('search')"
+                  class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-950 transition flex items-center gap-1.5 cursor-pointer">
+            <i class="fa-solid fa-magnifying-glass text-[11px]"></i>
+            <span>ค้นหาอะไหล่ (Inventory Search)</span>
+          </button>
+          <button type="button" id="invSubBtn-tx" onclick="switchInvSubTab('tx')"
+                  class="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#111113] hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition flex items-center gap-1.5 cursor-pointer">
+            <i class="fa-solid fa-clock-rotate-left text-[11px]"></i>
+            <span>ประวัติการตัดของ (Transaction History)</span>
+          </button>
+        </div>
+        <div class="text-xs text-zinc-400">
+          แสดงผล <span id="invResultCount" class="font-mono font-semibold text-zinc-100">0</span> P/N
+        </div>
       </div>
 
-      <!-- Mode 1: Inventory Cards View -->
-      <div id="invCardsView" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[550px] overflow-y-auto custom-scrollbar pr-0.5"></div>
+      <!-- ==================== SUB-TAB 1: INVENTORY SEARCH ==================== -->
+      <section id="invSub-search" class="space-y-4">
+        <div class="bg-[#111113] border border-zinc-800/80 rounded-xl p-3.5 sm:p-4 space-y-3">
+          <div class="flex flex-col sm:flex-row gap-2.5">
+            <!-- Omni Search Box -->
+            <div class="relative flex-1">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
+                <i class="fa-solid fa-magnifying-glass text-xs"></i>
+              </span>
+              <input id="invStockSearchInput" type="text" oninput="onInvSearchInput()"
+                     placeholder="พิมพ์ค้นหา P/N, Description, Bin, S/N หรือ Batch (พิมพ์บางส่วนก็เจอ)..."
+                     class="w-full bg-[#09090B] border border-zinc-800 rounded-lg pl-8 pr-16 py-2 text-xs sm:text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition" />
+              <button type="button" id="invClearStockSearchBtn" onclick="clearInvSearch()"
+                      class="hidden absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-[11px] font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 cursor-pointer">
+                ล้าง
+              </button>
+            </div>
 
-      <!-- Mode 2: Inventory Table View -->
-      <div id="invTableWrapper">
-        <div class="flex items-center justify-between text-[11px] text-zinc-500 sm:hidden pb-1.5">
+            <!-- Status Filter Pills -->
+            <div class="inline-flex items-center bg-[#09090B] p-1 rounded-lg border border-zinc-800 self-start sm:self-auto flex-shrink-0">
+              <button type="button" id="invFilter-all" onclick="setInvStatusFilter('all')"
+                      class="px-3 py-1 rounded-md text-xs font-semibold bg-zinc-100 text-zinc-950 transition cursor-pointer">
+                ทั้งหมด
+              </button>
+              <button type="button" id="invFilter-in" onclick="setInvStatusFilter('in')"
+                      class="px-3 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 transition flex items-center gap-1.5 cursor-pointer">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> มีของ
+              </button>
+              <button type="button" id="invFilter-out" onclick="setInvStatusFilter('out')"
+                      class="px-3 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 transition flex items-center gap-1.5 cursor-pointer">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> หมด (0)
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Sort Bar -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-zinc-800/80 text-xs">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="text-zinc-500 font-medium mr-1 flex items-center gap-1 text-[11px]">
+                <i class="fa-solid fa-arrow-down-a-z text-rose-400"></i> เรียงลำดับ:
+              </span>
+              <button type="button" id="invQsort-pn-asc" onclick="setInvSort('pn', 'asc')"
+                      class="inv-qsort-btn px-2.5 py-1 rounded-lg border text-[11px] font-medium flex items-center gap-1 cursor-pointer transition">
+                <span>P/N: A → Z</span> <i class="fa-solid fa-arrow-up-a-z text-[10px]"></i>
+              </button>
+              <button type="button" id="invQsort-pn-desc" onclick="setInvSort('pn', 'desc')"
+                      class="inv-qsort-btn px-2.5 py-1 rounded-lg border text-[11px] font-medium flex items-center gap-1 cursor-pointer transition">
+                <span>P/N: Z → A</span> <i class="fa-solid fa-arrow-down-z-a text-[10px]"></i>
+              </button>
+              <button type="button" id="invQsort-avbl-desc" onclick="setInvSort('avbl', 'desc')"
+                      class="inv-qsort-btn px-2.5 py-1 rounded-lg border text-[11px] font-medium flex items-center gap-1 cursor-pointer transition">
+                <span>จำนวน: มาก → น้อย</span> <i class="fa-solid fa-arrow-down-9-1 text-[10px]"></i>
+              </button>
+              <button type="button" id="invQsort-avbl-asc" onclick="setInvSort('avbl', 'asc')"
+                      class="inv-qsort-btn px-2.5 py-1 rounded-lg border text-[11px] font-medium flex items-center gap-1 cursor-pointer transition">
+                <span>จำนวน: น้อย → มาก</span> <i class="fa-solid fa-arrow-up-1-9 text-[10px]"></i>
+              </button>
+              <button type="button" id="invQsort-bin-asc" onclick="setInvSort('bin', 'asc')"
+                      class="inv-qsort-btn px-2.5 py-1 rounded-lg border text-[11px] font-medium flex items-center gap-1 cursor-pointer transition">
+                <span>Bin: A → Z</span> <i class="fa-solid fa-arrow-up-a-z text-[10px]"></i>
+              </button>
+              <button type="button" id="invQsort-description-asc" onclick="setInvSort('description', 'asc')"
+                      class="inv-qsort-btn px-2.5 py-1 rounded-lg border text-[11px] font-medium flex items-center gap-1 cursor-pointer transition">
+                <span>Description: A → Z</span> <i class="fa-solid fa-arrow-up-a-z text-[10px]"></i>
+              </button>
+            </div>
+            <span class="text-[11px] text-zinc-500 hidden sm:inline">กดที่หัวตารางเพื่อสลับเรียง ขึ้น/ลง ได้ทันที</span>
+          </div>
+        </div>
+
+        <!-- Stock Results Table -->
+        <div class="flex items-center justify-between text-[11px] text-zinc-500 sm:hidden">
           <span><i class="fa-solid fa-arrows-left-right mr-1"></i> เลื่อนตารางดูซ้าย-ขวา</span>
         </div>
-        <div class="bg-[#111113] border border-zinc-800/80 rounded-xl overflow-x-auto max-h-[540px] custom-scrollbar touch-pan-x" style="-webkit-overflow-scrolling: touch;">
-          <table class="w-full text-left text-xs min-w-[920px]">
-            <thead class="bg-[#09090B] text-zinc-400 uppercase tracking-wider sticky top-0 border-b border-zinc-800 font-mono text-[11px]">
+        <div class="bg-[#111113] border border-zinc-800/80 rounded-xl overflow-x-auto max-h-[560px] custom-scrollbar touch-pan-x" style="-webkit-overflow-scrolling: touch;">
+          <table class="w-full text-left text-xs min-w-[880px]">
+            <thead class="bg-[#09090B] text-zinc-400 uppercase tracking-wider sticky top-0 border-b border-zinc-800 font-mono text-[11px] select-none">
               <tr>
-                <th class="p-3 whitespace-nowrap font-medium">TYPE</th>
-                <th class="p-3 whitespace-nowrap font-medium">P/N</th>
-                <th class="p-3 whitespace-nowrap text-right font-medium">QTY</th>
-                <th class="p-3 whitespace-nowrap font-medium">LOC / BIN</th>
-                <th class="p-3 whitespace-nowrap font-medium">A/C</th>
-                <th class="p-3 whitespace-nowrap font-medium">W/O - S/O</th>
-                <th class="p-3 whitespace-nowrap font-medium">ISSUED TO</th>
-                <th class="p-3 whitespace-nowrap font-medium">DATE / BY</th>
-                <th class="p-3 text-right whitespace-nowrap font-medium">รายละเอียด</th>
+                <th onclick="toggleInvSort('pn')" class="p-3 cursor-pointer hover:text-white transition whitespace-nowrap font-medium">
+                  <div class="flex items-center gap-1.5">
+                    <span>Part No. (P/N)</span>
+                    <span id="invSortBadge-pn" class="px-1.5 py-0.5 rounded text-[10px] bg-rose-600 text-white">A→Z ▲</span>
+                  </div>
+                </th>
+                <th onclick="toggleInvSort('description')" class="p-3 cursor-pointer hover:text-white transition whitespace-nowrap font-medium">
+                  <div class="flex items-center gap-1.5">
+                    <span>Description</span>
+                    <span id="invSortBadge-description" class="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-400">⇅</span>
+                  </div>
+                </th>
+                <th onclick="toggleInvSort('bin')" class="p-3 cursor-pointer hover:text-white transition whitespace-nowrap font-medium">
+                  <div class="flex items-center gap-1.5">
+                    <span>Bin / Batch / S/N</span>
+                    <span id="invSortBadge-bin" class="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-400">⇅</span>
+                  </div>
+                </th>
+                <th onclick="toggleInvSort('avbl')" class="p-3 text-right cursor-pointer hover:text-white transition whitespace-nowrap font-medium">
+                  <div class="flex items-center justify-end gap-1.5">
+                    <span>Available</span>
+                    <span id="invSortBadge-avbl" class="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-400">⇅</span>
+                  </div>
+                </th>
+                <th onclick="toggleInvSort('status')" class="p-3 text-center cursor-pointer hover:text-white transition whitespace-nowrap font-medium">
+                  <div class="flex items-center justify-center gap-1.5">
+                    <span>สถานะ</span>
+                    <span id="invSortBadge-status" class="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-400">⇅</span>
+                  </div>
+                </th>
+                <th class="p-3 text-center whitespace-nowrap font-medium">ประวัติ</th>
               </tr>
             </thead>
-            <tbody id="invTableBody" class="divide-y divide-zinc-800/60 font-mono">
+            <tbody id="invStockTableBody" class="divide-y divide-zinc-800/60">
               <tr>
-                <td colspan="9" class="p-8 text-center text-zinc-500 font-sans text-xs">
-                  <i class="fa-solid fa-spinner fa-spin mr-1.5"></i> กำลังโหลดข้อมูล Inventory...
+                <td colspan="6" class="p-8 text-center text-zinc-500 text-xs">
+                  <i class="fa-solid fa-spinner fa-spin mr-1.5"></i> กำลังโหลดข้อมูล...
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
-      <!-- Collapsible Activity Log -->
-      <details id="invActivityLogSection" class="hidden bg-[#111113] border border-zinc-800/80 rounded-xl overflow-hidden">
-        <summary class="px-4 py-3 text-xs font-medium text-zinc-300 hover:text-white cursor-pointer flex items-center justify-between select-none">
-          <span class="flex items-center gap-2">
-            <i class="fa-solid fa-clock-rotate-left text-zinc-500"></i>
-            <span>ประวัติการเปลี่ยนแปลง (Activity Log)</span>
-            <span id="invActivityLogCount" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">0</span>
-          </span>
-          <i class="fa-solid fa-chevron-down text-[10px] text-zinc-500"></i>
-        </summary>
-        <div class="border-t border-zinc-800/80 overflow-x-auto max-h-64 custom-scrollbar">
-          <table class="w-full text-left text-xs min-w-[640px]">
-            <thead class="bg-[#09090B] text-zinc-500 font-mono text-[10px] uppercase border-b border-zinc-800/80">
+      <!-- ==================== SUB-TAB 2: TRANSACTION HISTORY ==================== -->
+      <section id="invSub-tx" class="hidden space-y-4">
+        <div class="bg-[#111113] border border-zinc-800/80 rounded-xl p-3.5 sm:p-4 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+              <h2 class="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                <i class="fa-solid fa-file-invoice text-rose-400"></i>
+                <span>ประวัติการตัดของและรับเข้าคลัง (Transaction History)</span>
+              </h2>
+              <p class="text-xs text-zinc-400 mt-0.5">
+                เริ่มบันทึกตั้งแต่วันที่ <span id="invTxStartDateLabel" class="font-mono font-semibold text-zinc-200">-</span> • แสดงรถ GSE, เลข W/O, ผู้เบิก และผู้ตัดจ่าย (<span id="invTxResultCount" class="font-mono font-semibold text-zinc-100">0</span> รายการ)
+              </p>
+            </div>
+            <button type="button" onclick="downloadInvTxExcel()"
+                    class="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-medium flex items-center gap-1.5 cursor-pointer transition">
+              <i class="fa-regular fa-file-excel text-[11px] text-emerald-700"></i>
+              <span>Export ประวัติ (Excel)</span>
+            </button>
+          </div>
+
+          <div class="flex flex-col lg:flex-row gap-2.5">
+            <div class="relative flex-1">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
+                <i class="fa-solid fa-magnifying-glass text-xs"></i>
+              </span>
+              <input id="invTxSearchInput" type="text" oninput="onInvTxSearchInput()"
+                     placeholder="ค้นหา P/N, รหัสรถ GSE (เช่น TLM-BU-012), เลข W/O, ผู้เบิก, Bin หรือ Tx#..."
+                     class="w-full bg-[#09090B] border border-zinc-800 rounded-lg pl-8 pr-16 py-2 text-xs sm:text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition" />
+              <button type="button" id="invClearTxSearchBtn" onclick="clearInvTxSearch()"
+                      class="hidden absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-[11px] font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 cursor-pointer">
+                ล้าง
+              </button>
+            </div>
+
+            <!-- Type Filter -->
+            <div class="inline-flex items-center bg-[#09090B] p-1 rounded-lg border border-zinc-800 self-start flex-shrink-0">
+              <button type="button" id="invTxType-all" onclick="setInvTxType('all')" class="px-2.5 py-1 rounded-md text-xs font-semibold bg-zinc-100 text-zinc-950 cursor-pointer transition">ทั้งหมด</button>
+              <button type="button" id="invTxType-ISSUED" onclick="setInvTxType('ISSUED')" class="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 cursor-pointer transition">ISSUED</button>
+              <button type="button" id="invTxType-RECEIVING" onclick="setInvTxType('RECEIVING')" class="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 cursor-pointer transition">RECEIVING</button>
+            </div>
+
+            <!-- Days Filter -->
+            <div class="flex flex-wrap items-center gap-1 bg-[#09090B] p-1 rounded-lg border border-zinc-800 self-start flex-shrink-0">
+              <button type="button" id="invChgDays-0" onclick="loadInvTransactions(0)" class="px-2.5 py-1 rounded-md text-xs font-semibold bg-zinc-100 text-zinc-950 cursor-pointer transition">ทั้งหมด</button>
+              <button type="button" id="invChgDays-1" onclick="loadInvTransactions(1)" class="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 cursor-pointer transition">วันนี้</button>
+              <button type="button" id="invChgDays-3" onclick="loadInvTransactions(3)" class="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 cursor-pointer transition">3 วัน</button>
+              <button type="button" id="invChgDays-7" onclick="loadInvTransactions(7)" class="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 cursor-pointer transition">7 วัน</button>
+              <button type="button" id="invChgDays-30" onclick="loadInvTransactions(30)" class="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 cursor-pointer transition">30 วัน</button>
+              <button type="button" id="invChgDays-90" onclick="loadInvTransactions(90)" class="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 cursor-pointer transition">90 วัน</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[11px] text-zinc-500 sm:hidden">
+          <span><i class="fa-solid fa-arrows-left-right mr-1"></i> เลื่อนตารางดูซ้าย-ขวา</span>
+        </div>
+        <div class="bg-[#111113] border border-zinc-800/80 rounded-xl overflow-x-auto max-h-[540px] custom-scrollbar touch-pan-x" style="-webkit-overflow-scrolling: touch;">
+          <table class="w-full text-left text-xs min-w-[960px]">
+            <thead class="bg-[#09090B] text-zinc-400 uppercase tracking-wider sticky top-0 border-b border-zinc-800 font-mono text-[11px] select-none">
               <tr>
-                <th class="px-3.5 py-2 font-medium">Timestamp</th>
-                <th class="px-3.5 py-2 font-medium">Action</th>
-                <th class="px-3.5 py-2 font-medium">Trans NO</th>
-                <th class="px-3.5 py-2 font-medium">Type</th>
-                <th class="px-3.5 py-2 font-medium">Details</th>
+                <th onclick="toggleInvTxSort('tx_datetime')" class="p-3 cursor-pointer hover:text-white whitespace-nowrap font-medium">
+                  วัน-เวลา <span id="invTxSort-tx_datetime" class="text-rose-400">▼</span>
+                </th>
+                <th onclick="toggleInvTxSort('transaction_type')" class="p-3 cursor-pointer hover:text-white whitespace-nowrap font-medium">
+                  ประเภท <span id="invTxSort-transaction_type" class="text-zinc-500">⇅</span>
+                </th>
+                <th onclick="toggleInvTxSort('pn')" class="p-3 cursor-pointer hover:text-white whitespace-nowrap font-medium">
+                  Part No. (P/N) / Description <span id="invTxSort-pn" class="text-zinc-500">⇅</span>
+                </th>
+                <th onclick="toggleInvTxSort('qty')" class="p-3 text-right cursor-pointer hover:text-white whitespace-nowrap font-medium">
+                  จำนวน <span id="invTxSort-qty" class="text-zinc-500">⇅</span>
+                </th>
+                <th onclick="toggleInvTxSort('ac')" class="p-3 cursor-pointer hover:text-white whitespace-nowrap font-medium">
+                  รถ GSE / เลข W/O <span id="invTxSort-ac" class="text-zinc-500">⇅</span>
+                </th>
+                <th onclick="toggleInvTxSort('issued_to')" class="p-3 cursor-pointer hover:text-white whitespace-nowrap font-medium">
+                  ผู้เบิก (Issued To) <span id="invTxSort-issued_to" class="text-zinc-500">⇅</span>
+                </th>
+                <th class="p-3 whitespace-nowrap font-medium">ผู้ตัดจ่าย (Created By)</th>
+                <th class="p-3 whitespace-nowrap font-medium">Bin / Batch / Trans No.</th>
               </tr>
             </thead>
-            <tbody id="invActivityLogBody" class="divide-y divide-zinc-800/50 font-mono text-[11px]"></tbody>
+            <tbody id="invTxTableBody" class="divide-y divide-zinc-800/60">
+              <tr>
+                <td colspan="8" class="p-8 text-center text-zinc-500 text-xs">ไม่มีรายการประวัติการตัดของ</td>
+              </tr>
+            </tbody>
           </table>
         </div>
-      </details>
+
+        <!-- Secondary Collapsible Table: Snapshot Diff Movements -->
+        <details class="bg-[#111113] border border-zinc-800/80 rounded-xl overflow-hidden">
+          <summary class="px-4 py-3 text-xs font-medium text-zinc-300 hover:text-white cursor-pointer flex items-center justify-between select-none">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-chart-simple text-rose-400"></i>
+              <span>การเปลี่ยนแปลงยอดคงเหลือจากการเปรียบเทียบ Snapshot (Avbl Diff Log)</span>
+            </span>
+            <span class="text-[11px] text-zinc-500">คลิกเพื่อเปิด/ปิด</span>
+          </summary>
+          <div class="border-t border-zinc-800/80 overflow-x-auto max-h-72 custom-scrollbar">
+            <table class="w-full text-left text-xs min-w-[700px]">
+              <thead class="bg-[#09090B] text-zinc-500 font-mono text-[10px] uppercase border-b border-zinc-800/80">
+                <tr>
+                  <th class="p-3 font-medium">วัน-เวลาที่ตรวจพบ</th>
+                  <th class="p-3 font-medium">ประเภท</th>
+                  <th class="p-3 font-medium">P/N</th>
+                  <th class="p-3 font-medium">Description</th>
+                  <th class="p-3 font-medium">Bin / Batch</th>
+                  <th class="p-3 text-right font-medium">ยอดเดิม → ยอดใหม่</th>
+                </tr>
+              </thead>
+              <tbody id="invChangesTableBody" class="divide-y divide-zinc-800/50 text-xs">
+                <tr>
+                  <td colspan="6" class="p-6 text-center text-zinc-500">ไม่มีรายการเปลี่ยนแปลง</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
 
     </div>
 
   </main>
 
-  <!-- Inventory 30-Field Detail Modal -->
-  <div id="invDetailModal" onclick="if (event.target === this) closeInventoryModal()"
+  <!-- ==================== MODAL: ITEM CHANGE & TRANSACTION HISTORY ==================== -->
+  <div id="invItemHistoryModal" onclick="if (event.target === this) closeInvHistoryModal()"
        class="fixed inset-0 z-[70] bg-black/75 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-4">
-    <div class="bg-[#111113] border border-zinc-800 rounded-2xl max-w-3xl w-full max-h-[88vh] overflow-hidden flex flex-col shadow-2xl">
-      <div class="px-5 py-4 border-b border-zinc-800/80 flex items-start justify-between gap-3 bg-[#09090B]">
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-2">
-            <h2 class="text-[15px] font-semibold font-mono text-zinc-100 truncate" id="invModalTitle">-</h2>
-            <span id="invModalTypeBadge"></span>
-          </div>
-          <div class="flex items-center gap-2 mt-1 text-xs text-zinc-400 font-mono">
-            <span id="invModalSubtitle">Transaction NO: -</span>
-            <button type="button" id="invModalCopyTnoBtn" onclick="copyInventoryModalTno()"
-                    class="text-[11px] text-zinc-400 hover:text-white px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 transition cursor-pointer" title="คัดลอก Transaction NO">
-              <i class="fa-regular fa-copy"></i>
-            </button>
-          </div>
-        </div>
-        <button type="button" onclick="closeInventoryModal()" class="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition cursor-pointer">
+    <div class="bg-[#111113] border border-zinc-800 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="px-5 py-4 bg-[#09090B] border-b border-zinc-800/80 flex items-center justify-between gap-3">
+        <h2 class="text-[15px] font-semibold text-zinc-100 flex flex-wrap items-center gap-2 min-w-0">
+          <i class="fa-solid fa-clock-rotate-left text-rose-400"></i>
+          <span>ประวัติการตัดของและการเคลื่อนไหว P/N:</span>
+          <span id="invHistModalPn" class="font-mono bg-zinc-900 text-rose-300 border border-zinc-800 px-2 py-0.5 rounded text-xs">-</span>
+        </h2>
+        <button type="button" onclick="closeInvHistoryModal()" class="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition cursor-pointer">
           <i class="fa-solid fa-xmark text-sm"></i>
         </button>
       </div>
+      <div id="invHistModalBody" class="p-5 overflow-y-auto custom-scrollbar space-y-4 text-xs bg-[#111113]"></div>
+    </div>
+  </div>
 
-      <div id="invModalBody" class="p-5 overflow-y-auto custom-scrollbar space-y-5 text-xs"></div>
-
-      <div class="px-5 py-3 bg-[#09090B] border-t border-zinc-800/80 flex items-center justify-end gap-2">
-        <button type="button" onclick="closeInventoryModal()" class="px-4 py-1.5 text-xs font-medium text-zinc-200 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-lg transition cursor-pointer">
-          ปิดหน้าต่าง
+  <!-- ==================== MODAL: PIN PROMPT FOR REFRESH ==================== -->
+  <div id="invPinModal" onclick="if (event.target === this) closeInvPinModal()"
+       class="fixed inset-0 z-[70] bg-black/75 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-[#111113] border border-zinc-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h2 class="text-[15px] font-semibold text-zinc-100 flex items-center gap-2">
+          <i class="fa-solid fa-lock text-rose-400"></i>
+          <span>ยืนยันรหัส PIN เพื่อดึงข้อมูลสดจาก eMRO</span>
+        </h2>
+        <button type="button" onclick="closeInvPinModal()" class="text-zinc-400 hover:text-white cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <p class="text-xs text-zinc-400">
+        ระบบจะสั่งล็อกอิน eMRO และดาวน์โหลดข้อมูล Inventory (DM01) ล่าสุดทันที ใช้เวลาประมาณ 15–30 วินาที
+      </p>
+      <input id="invPinInput" type="password" inputmode="numeric" placeholder="กรอกรหัส PIN..."
+             onkeydown="if (event.key === 'Enter') submitInvRefreshPin()"
+             class="w-full px-3.5 py-2.5 rounded-xl bg-[#09090B] border border-zinc-800 focus:border-zinc-500 focus:outline-none text-center font-mono text-base tracking-widest text-zinc-100" />
+      <div id="invPinError" class="hidden text-xs text-rose-400 font-medium text-center"></div>
+      <div class="flex items-center justify-end gap-2">
+        <button type="button" onclick="closeInvPinModal()" class="px-3.5 py-2 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 cursor-pointer">ยกเลิก</button>
+        <button type="button" onclick="submitInvRefreshPin()" class="px-4 py-2 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white cursor-pointer">
+          <i class="fa-solid fa-rotate mr-1"></i> เริ่มดึงข้อมูล
         </button>
       </div>
     </div>
@@ -1039,7 +1210,6 @@
     let queueViewMode = (window.innerWidth < 768) ? 'card' : 'table';
     let resultsViewMode = (window.innerWidth < 768) ? 'card' : 'table';
     let masterViewMode = (window.innerWidth < 768) ? 'card' : 'table';
-    let inventoryViewMode = (window.innerWidth < 768) ? 'card' : 'table';
 
     // Init
     window.addEventListener('DOMContentLoaded', () => {
@@ -1047,13 +1217,14 @@
       fetchMasterList();
       checkBatchStatus();
       fetchHistoryLogs();
-      fetchInventoryData(false);
+      pollInvStatus();
+      runInvSearch();
       setQueueViewMode(queueViewMode);
       setResultsViewMode(resultsViewMode);
       setMasterViewMode(masterViewMode);
       setHistoryViewMode(historyViewMode);
-      setInventoryViewMode(inventoryViewMode);
       setInterval(checkBatchStatus, 2500);
+      setInterval(pollInvStatus, 3000);
     });
 
     let isEmroConnected = false;
@@ -1118,8 +1289,14 @@
 
       if (tab === 'history') {
         fetchHistoryLogs();
-      } else if (tab === 'inventory' && !inventoryLoaded) {
-        fetchInventoryData(false);
+      } else if (tab === 'inventory') {
+        pollInvStatus();
+        if (invCurrentSubTab === 'tx') {
+          loadInvTransactions(invCurrentDays);
+          loadInvChanges(invCurrentDays || 7);
+        } else {
+          runInvSearch();
+        }
       }
     }
 
@@ -2551,15 +2728,22 @@
         .replace(/'/g, "&#39;");
     }
 
-    // ==================== INVENTORY TRANSACTION MONITOR ====================
-    let allInventoryItems = [];
-    let filteredInventoryItems = [];
-    let inventoryLogs = [];
-    let inventoryLoaded = false;
-    let currentInventoryFilter = 'ALL';
-    let currentInventoryModalTno = '';
+    // ==================== UNIFIED INVENTORY SEARCH & HISTORY ====================
+    let invPinRequired = false;
+    let invCurrentStatus = 'all';
+    let invCurrentSubTab = 'search';
+    let invSearchTimer = null;
+    let invCurrentSortBy = 'pn';
+    let invCurrentSortDir = 'asc';
+    let invLastSearchItems = [];
+    let invCurrentDays = 0;
+    let invCurrentTxType = 'all';
+    let invCurrentTxSortBy = 'tx_datetime';
+    let invCurrentTxSortDir = 'desc';
+    let invTxSearchTimer = null;
+    let invWasRunning = false;
 
-    function showInventoryBanner(message, type = 'info') {
+    function showInvBanner(message, type = 'info') {
       const banner = document.getElementById('invStatusBanner');
       const icon = document.getElementById('invStatusBannerIcon');
       const text = document.getElementById('invStatusBannerText');
@@ -2584,559 +2768,716 @@
       banner.classList.remove('hidden');
     }
 
-    function hideInventoryBanner() {
+    function hideInvBanner() {
       const banner = document.getElementById('invStatusBanner');
       if (banner) banner.classList.add('hidden');
     }
 
-    function getInventoryTypeBadge(tType) {
-      const u = (tType || '').toUpperCase();
-      if (u.includes('ISSUED')) {
-        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-amber-400"></span>${escapeHtml(tType)}</span>`;
-      }
-      if (u.includes('RECEIVING')) {
-        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-emerald-400"></span>${escapeHtml(tType)}</span>`;
-      }
-      if (u.includes('TRANSFER')) {
-        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-sky-400"></span>${escapeHtml(tType)}</span>`;
-      }
-      if (u.includes('RTS')) {
-        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-violet-400"></span>${escapeHtml(tType)}</span>`;
-      }
-      return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-800 text-zinc-300 border border-zinc-700 whitespace-nowrap">${escapeHtml(tType || 'OTHER')}</span>`;
+    function fmtInvNum(v) {
+      const n = Number(v || 0);
+      return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.00$/, '');
     }
 
-    function setInventoryViewMode(mode) {
-      inventoryViewMode = mode;
-      const cardContainer = document.getElementById('invCardsView');
-      const tableWrapper = document.getElementById('invTableWrapper');
-      const btnCard = document.getElementById('btnInvViewCard');
-      const btnTable = document.getElementById('btnInvViewTable');
+    function switchInvSubTab(tab) {
+      invCurrentSubTab = tab;
+      const searchEl = document.getElementById('invSub-search');
+      const txEl = document.getElementById('invSub-tx');
+      const btnSearch = document.getElementById('invSubBtn-search');
+      const btnTx = document.getElementById('invSubBtn-tx');
 
-      if (cardContainer) cardContainer.classList.toggle('hidden', mode !== 'card');
-      if (tableWrapper) tableWrapper.classList.toggle('hidden', mode !== 'table');
-      updateSegmentedButtons(btnCard, btnTable, mode);
+      if (searchEl) searchEl.classList.toggle('hidden', tab !== 'search');
+      if (txEl) txEl.classList.toggle('hidden', tab !== 'tx');
+
+      if (btnSearch) {
+        btnSearch.className = tab === 'search'
+          ? 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-950 transition flex items-center gap-1.5 cursor-pointer'
+          : 'px-3 py-1.5 rounded-lg text-xs font-medium bg-[#111113] hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition flex items-center gap-1.5 cursor-pointer';
+      }
+      if (btnTx) {
+        btnTx.className = tab === 'tx'
+          ? 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 text-zinc-950 transition flex items-center gap-1.5 cursor-pointer'
+          : 'px-3 py-1.5 rounded-lg text-xs font-medium bg-[#111113] hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition flex items-center gap-1.5 cursor-pointer';
+      }
+
+      if (tab === 'tx') {
+        loadInvTransactions(invCurrentDays);
+        loadInvChanges(invCurrentDays || 7);
+      } else {
+        runInvSearch();
+      }
     }
 
-    function setInventoryFilterType(type) {
-      currentInventoryFilter = type;
-      ['ALL', 'ISSUED', 'RECEIVING', 'TRANSFER', 'RTS'].forEach(t => {
-        const btn = document.getElementById(`invFilter-${t}`);
-        if (!btn) return;
-        const active = t === type;
-        btn.className = active
-          ? "inv-filter-pill px-3 py-1.5 rounded-lg bg-zinc-100 text-zinc-950 font-semibold transition flex items-center gap-1.5 cursor-pointer"
-          : "inv-filter-pill px-3 py-1.5 rounded-lg bg-[#111113] hover:bg-zinc-800 text-zinc-300 border border-zinc-800 font-medium transition flex items-center gap-1.5 cursor-pointer";
+    function setInvStatusFilter(st) {
+      invCurrentStatus = st;
+      ['all', 'in', 'out'].forEach(s => {
+        const b = document.getElementById(`invFilter-${s}`);
+        if (!b) return;
+        b.className = s === st
+          ? 'px-3 py-1 rounded-md text-xs font-semibold bg-zinc-100 text-zinc-950 transition flex items-center gap-1.5 cursor-pointer'
+          : 'px-3 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 transition flex items-center gap-1.5 cursor-pointer';
       });
-      applyInventoryFilters();
+      if (invCurrentSubTab !== 'search') switchInvSubTab('search');
+      runInvSearch();
     }
 
-    function clearInventorySearch() {
-      const input = document.getElementById('invSearchInput');
-      if (input) {
-        input.value = '';
-        input.focus();
-      }
-      applyInventoryFilters();
+    function onInvSearchInput() {
+      const inp = document.getElementById('invStockSearchInput');
+      const clearBtn = document.getElementById('invClearStockSearchBtn');
+      const val = inp ? inp.value : '';
+      if (clearBtn) clearBtn.classList.toggle('hidden', !val);
+      clearTimeout(invSearchTimer);
+      invSearchTimer = setTimeout(runInvSearch, 180);
     }
 
-    function applyInventoryDataPayload(data) {
-      allInventoryItems = Array.isArray(data.items) ? data.items : [];
-      inventoryLogs = Array.isArray(data.logs) ? data.logs : [];
-      inventoryLoaded = true;
-
-      const stats = data.stats || {};
-      const total = stats.total !== undefined ? stats.total : allInventoryItems.length;
-      const issued = stats.issued || 0;
-      const receiving = stats.receiving || 0;
-      const transfer = stats.transfer || 0;
-      const rts = stats.rts !== undefined
-        ? stats.rts
-        : allInventoryItems.filter(it => (it.transaction_type || '').toUpperCase().includes('RTS')).length;
-      const pureTransfer = allInventoryItems.filter(it => (it.transaction_type || '').toUpperCase().includes('TRANSFER')).length;
-
-      const navBadge = document.getElementById('inventoryTotalBadge');
-      if (navBadge) navBadge.innerText = total;
-
-      const kpiTotal = document.getElementById('invKpiTotal');
-      const kpiIssued = document.getElementById('invKpiIssued');
-      const kpiReceiving = document.getElementById('invKpiReceiving');
-      const kpiTransfer = document.getElementById('invKpiTransfer');
-      if (kpiTotal) kpiTotal.innerText = total.toLocaleString();
-      if (kpiIssued) kpiIssued.innerText = issued.toLocaleString();
-      if (kpiReceiving) kpiReceiving.innerText = receiving.toLocaleString();
-      if (kpiTransfer) kpiTransfer.innerText = transfer.toLocaleString();
-
-      const pAll = document.getElementById('invPillAllCount');
-      const pIss = document.getElementById('invPillIssuedCount');
-      const pRec = document.getElementById('invPillReceivingCount');
-      const pTrf = document.getElementById('invPillTransferCount');
-      const pRts = document.getElementById('invPillRtsCount');
-      if (pAll) pAll.innerText = total;
-      if (pIss) pIss.innerText = issued;
-      if (pRec) pRec.innerText = receiving;
-      if (pTrf) pTrf.innerText = pureTransfer;
-      if (pRts) pRts.innerText = rts;
-
-      const loc = data.location || data.default_location || 'DM01';
-      const locBadgeText = document.getElementById('invLocationBadgeText');
-      if (locBadgeText) locBadgeText.innerText = loc;
-      const locInput = document.getElementById('invLocationInput');
-      if (locInput && (!locInput.value || locInput.value === 'DM01')) {
-        locInput.value = loc;
+    function clearInvSearch() {
+      const inp = document.getElementById('invStockSearchInput');
+      const clearBtn = document.getElementById('invClearStockSearchBtn');
+      if (inp) {
+        inp.value = '';
+        inp.focus();
       }
+      if (clearBtn) clearBtn.classList.add('hidden');
+      runInvSearch();
+    }
 
-      const sourceLabels = {
-        google_sheets: 'Google Sheets (Live Transactions)',
-        emro_live: 'eMRO Live Scrape',
-        snapshot: 'Local Snapshot (Fallback)',
-        local_cache: 'Local Cache (Fallback)',
-        empty: 'ยังไม่มีข้อมูล',
+    function toggleInvSort(field) {
+      if (invCurrentSortBy === field) {
+        invCurrentSortDir = invCurrentSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        invCurrentSortBy = field;
+        invCurrentSortDir = (field === 'avbl') ? 'desc' : 'asc';
+      }
+      updateInvSortUI();
+      sortAndRenderInvClient();
+    }
+
+    function setInvSort(field, dir) {
+      invCurrentSortBy = field;
+      invCurrentSortDir = dir;
+      updateInvSortUI();
+      sortAndRenderInvClient();
+    }
+
+    function updateInvSortUI() {
+      const labels = {
+        pn: { asc: 'A→Z ▲', desc: 'Z→A ▼' },
+        description: { asc: 'A→Z ▲', desc: 'Z→A ▼' },
+        bin: { asc: 'A→Z ▲', desc: 'Z→A ▼' },
+        avbl: { asc: 'น้อย→มาก ▲', desc: 'มาก→น้อย ▼' },
+        status: { asc: 'หมด→มี ▲', desc: 'มี→หมด ▼' },
       };
-      const sourceText = sourceLabels[data.source] || data.source || '-';
-      const lastSync = data.last_sync || stats.last_sync || '-';
-      const syncMeta = document.getElementById('invSyncMeta');
-      if (syncMeta) {
-        syncMeta.innerText = `แหล่งข้อมูล: ${sourceText} · อัปเดตล่าสุด: ${lastSync}`;
-      }
-
-      renderInventoryActivityLogs(inventoryLogs);
-      applyInventoryFilters();
-    }
-
-    async function fetchInventoryData(forceRefresh = false) {
-      const refreshIcon = document.getElementById('invRefreshIcon');
-      const refreshBtn = document.getElementById('invRefreshBtn');
-      if (refreshIcon) refreshIcon.classList.add('fa-spin');
-      if (refreshBtn) refreshBtn.disabled = true;
-
-      try {
-        const url = forceRefresh ? '/api/inventory?refresh=1' : '/api/inventory';
-        const res = await fetch(url);
-        if (res.status === 401) {
-          window.location.href = '/login';
-          return;
+      ['pn', 'description', 'bin', 'avbl', 'status'].forEach(f => {
+        const badge = document.getElementById(`invSortBadge-${f}`);
+        if (!badge) return;
+        if (f === invCurrentSortBy) {
+          badge.innerText = labels[f][invCurrentSortDir];
+          badge.className = 'px-1.5 py-0.5 rounded text-[10px] font-mono bg-rose-600 text-white';
+        } else {
+          badge.innerText = '⇅';
+          badge.className = 'px-1.5 py-0.5 rounded text-[10px] font-mono bg-zinc-800 text-zinc-400';
         }
-        if (res.status === 404) {
-          showInventoryBanner('ไม่พบ API /api/inventory — กรุณาปิดและเปิด start_gse_app.bat ใหม่เพื่อโหลดระบบ Inventory', 'warning');
-          return;
-        }
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          showInventoryBanner(data.error || `โหลดข้อมูล Inventory ไม่สำเร็จ (HTTP ${res.status})`, 'error');
-          return;
-        }
-
-        if (forceRefresh) {
-          hideInventoryBanner();
-        }
-        applyInventoryDataPayload(data);
-      } catch (err) {
-        console.error('Failed to fetch inventory:', err);
-        showInventoryBanner(`เกิดข้อผิดพลาดในการเชื่อมต่อ Inventory API: ${err}`, 'error');
-      } finally {
-        if (refreshIcon) setTimeout(() => refreshIcon.classList.remove('fa-spin'), 350);
-        if (refreshBtn) refreshBtn.disabled = false;
-      }
-    }
-
-    async function syncInventoryFromEmro() {
-      const btn = document.getElementById('invSyncEmroBtn');
-      const icon = document.getElementById('invSyncEmroIcon');
-      const label = document.getElementById('invSyncEmroText');
-      const locInput = document.getElementById('invLocationInput');
-      const location = ((locInput && locInput.value) ? locInput.value.trim().toUpperCase() : 'DM01') || 'DM01';
-      if (locInput) locInput.value = location;
-
-      if (btn) btn.disabled = true;
-      if (icon) icon.className = 'fa-solid fa-spinner fa-spin text-[11px]';
-      if (label) label.innerText = 'กำลังดึงจาก eMRO...';
-      showInventoryBanner(`กำลังเปิด eMRO และดึงข้อมูล Inventory Transaction History Query (${location})...`, 'info');
-
-      try {
-        const res = await fetch('/api/inventory/sync-emro', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ location, sync_sheet: true }),
-        });
-
-        if (res.status === 401) {
-          window.location.href = '/login';
-          return;
-        }
-        if (res.status === 404) {
-          showInventoryBanner('ไม่พบ API /api/inventory/sync-emro — กรุณาปิดและเปิด start_gse_app.bat ใหม่เพื่อโหลดระบบ Inventory', 'warning');
-          return;
-        }
-
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          showInventoryBanner(data.error || `ดึงข้อมูลจาก eMRO ไม่สำเร็จ (HTTP ${res.status})`, 'error');
-          return;
-        }
-
-        applyInventoryDataPayload(data);
-        const sheetNote = data.sheet_synced ? ' · ซิงค์ขึ้น Google Sheets แล้ว' : '';
-        showInventoryBanner(
-          `ดึงข้อมูลจาก eMRO (${data.location}) สำเร็จ ${data.items.length} รายการ (ใหม่ ${data.new_count || 0}, อัปเดต ${data.updated_count || 0}${sheetNote})`,
-          'success'
-        );
-      } catch (err) {
-        console.error('Failed to sync inventory from eMRO:', err);
-        showInventoryBanner(`เกิดข้อผิดพลาดระหว่างดึงข้อมูลจาก eMRO: ${err}`, 'error');
-      } finally {
-        if (btn) btn.disabled = false;
-        if (icon) icon.className = 'fa-solid fa-cloud-arrow-down text-[11px]';
-        if (label) label.innerText = 'ดึงสดจาก eMRO';
-      }
-    }
-
-    function applyInventoryFilters() {
-      const input = document.getElementById('invSearchInput');
-      const clearBtn = document.getElementById('invClearSearchBtn');
-      const rawQ = input ? input.value : '';
-      const q = rawQ.trim().toLowerCase();
-      if (clearBtn) clearBtn.classList.toggle('hidden', q.length === 0);
-
-      filteredInventoryItems = allInventoryItems.filter(it => {
-        const tType = String(it.transaction_type || '').toUpperCase();
-        if (currentInventoryFilter !== 'ALL' && !tType.includes(currentInventoryFilter)) {
-          return false;
-        }
-        if (q) {
-          const hay = [
-            it.transaction_no, it.transaction_type, it.pn, it.sn, it.batch,
-            it.grb, it.vendor_lot, it.location, it.bin, it.condition,
-            it.ac, it.wo_so, it.issued_to, it.issued_to_name,
-            it.order_no, it.vendor_customer, it.vendor_name, it.reference,
-            it.status, it.created_by, it.created_date, it.created_name,
-            it.defect_description
-          ].join(' ').toLowerCase();
-          if (!hay.includes(q)) return false;
-        }
-        return true;
       });
 
-      const label = document.getElementById('invResultCountLabel');
-      if (label) {
-        label.innerText = `แสดง ${filteredInventoryItems.length.toLocaleString()} จาก ${allInventoryItems.length.toLocaleString()} รายการ`;
+      document.querySelectorAll('.inv-qsort-btn').forEach(btn => {
+        btn.className = 'inv-qsort-btn px-2.5 py-1 rounded-lg border border-zinc-800 bg-[#09090B] text-zinc-300 hover:border-zinc-700 text-[11px] font-medium flex items-center gap-1 cursor-pointer transition';
+      });
+      const activeQuick = document.getElementById(`invQsort-${invCurrentSortBy}-${invCurrentSortDir}`);
+      if (activeQuick) {
+        activeQuick.className = 'inv-qsort-btn px-2.5 py-1 rounded-lg border border-rose-500/40 bg-rose-500/15 text-rose-300 text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition';
       }
-
-      renderInventoryCards(filteredInventoryItems);
-      renderInventoryTable(filteredInventoryItems);
     }
 
-    function renderInventoryCards(items) {
-      const container = document.getElementById('invCardsView');
-      if (!container) return;
-
-      if (!items || items.length === 0) {
-        container.innerHTML = `
-          <div class="col-span-full p-8 text-center text-zinc-500 font-sans bg-[#111113] rounded-xl border border-dashed border-zinc-800 text-xs">
-            ${allInventoryItems.length === 0 ? 'ยังไม่มีข้อมูล Inventory — กด "ดึงสดจาก eMRO" หรือ "รีเฟรช"' : 'ไม่พบรายการที่ตรงกับเงื่อนไขการค้นหา'}
-          </div>
-        `;
-        return;
-      }
-
-      container.innerHTML = items.map((r, idx) => {
-        const pn = r.pn || '-';
-        const tNo = r.transaction_no || '-';
-        const locBin = [r.location || '-', r.bin || '-'].join(' / ');
-        const wo = r.wo_so || '';
-        const ac = r.ac || '';
-        const issued = r.issued_to_name || r.issued_to || '';
-        const dateStr = r.created_date || '-';
-
-        return `
-          <div class="bg-[#111113] border border-zinc-800/80 hover:border-zinc-700 rounded-xl p-4 space-y-2.5 transition">
-            <div class="flex items-center justify-between gap-2">
-              ${getInventoryTypeBadge(r.transaction_type)}
-              <span class="text-[11px] font-mono text-zinc-500">#${escapeHtml(tNo)}</span>
-            </div>
-            <div>
-              <div class="flex items-center justify-between gap-2">
-                <button type="button" data-copy="${escapeHtml(pn)}" onclick="copyText(this.dataset.copy, this)"
-                        class="text-sm font-semibold font-mono text-zinc-100 hover:text-rose-300 truncate text-left transition cursor-pointer" title="คลิกเพื่อคัดลอก P/N">
-                  ${escapeHtml(pn)}
-                </button>
-                <span class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-zinc-900 text-zinc-200 border border-zinc-800 flex-shrink-0">
-                  QTY ${escapeHtml(r.qty || '-')}
-                </span>
-              </div>
-              <div class="text-[11px] font-mono text-zinc-400 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span>${escapeHtml(locBin)}</span>
-                ${r.batch ? `<span>· Batch: ${escapeHtml(r.batch)}</span>` : ''}
-                ${r.condition ? `<span>· ${escapeHtml(r.condition)}</span>` : ''}
-              </div>
-            </div>
-            <div class="text-xs border-t border-zinc-800/80 pt-2 space-y-1">
-              ${ac ? `<div class="flex justify-between gap-2"><span class="text-zinc-500">A/C:</span><span class="font-mono text-zinc-200 truncate">${escapeHtml(ac)}</span></div>` : ''}
-              ${wo ? `<div class="flex justify-between gap-2"><span class="text-zinc-500">W/O - S/O:</span><span class="font-mono text-zinc-200">${escapeHtml(wo)}</span></div>` : ''}
-              ${issued ? `<div class="flex justify-between gap-2"><span class="text-zinc-500">Issued To:</span><span class="text-zinc-300 truncate max-w-[180px]">${escapeHtml(issued)}</span></div>` : ''}
-            </div>
-            <div class="pt-2 border-t border-zinc-800/80 flex items-center justify-between gap-2 text-[11px]">
-              <span class="font-mono text-zinc-500 truncate">${escapeHtml(dateStr)}</span>
-              <button type="button" onclick="openInventoryModalByIdx(${idx})"
-                      class="text-rose-400 hover:text-rose-300 font-medium whitespace-nowrap cursor-pointer">
-                ดู 30 ฟิลด์ →
-              </button>
-            </div>
-          </div>
-        `;
-      }).join('');
+    function invNatCompare(a, b) {
+      return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
     }
 
-    function renderInventoryTable(items) {
-      const tbody = document.getElementById('invTableBody');
+    function sortAndRenderInvClient() {
+      const dir = invCurrentSortDir === 'desc' ? -1 : 1;
+      const sorted = [...invLastSearchItems].sort((a, b) => {
+        let cmp = 0;
+        if (invCurrentSortBy === 'avbl') {
+          cmp = (Number(a.total_avbl || 0) - Number(b.total_avbl || 0)) * dir;
+        } else if (invCurrentSortBy === 'bin') {
+          const ab = (a.rows && a.rows[0] ? a.rows[0].bin : a.last_bin) || '';
+          const bb = (b.rows && b.rows[0] ? b.rows[0].bin : b.last_bin) || '';
+          cmp = invNatCompare(ab, bb) * dir;
+        } else if (invCurrentSortBy === 'description') {
+          cmp = invNatCompare(a.description, b.description) * dir;
+        } else if (invCurrentSortBy === 'status') {
+          const sa = a.status === 'IN_STOCK' ? 1 : 0;
+          const sb = b.status === 'IN_STOCK' ? 1 : 0;
+          cmp = (sa - sb) * dir;
+        } else {
+          cmp = invNatCompare(a.pn, b.pn) * dir;
+        }
+        return cmp !== 0 ? cmp : invNatCompare(a.pn, b.pn);
+      });
+      renderInvSearchResults(sorted);
+    }
+
+    async function runInvSearch() {
+      const inp = document.getElementById('invStockSearchInput');
+      const q = inp ? inp.value.trim() : '';
+      try {
+        const res = await fetch(`/api/inv/search?q=${encodeURIComponent(q)}&status=${invCurrentStatus}&sort_by=${invCurrentSortBy}&sort_dir=${invCurrentSortDir}&limit=2000`);
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        if (res.status === 404) {
+          showInvBanner('ไม่พบ API /api/inv/search — กรุณาปิดและเปิด start_gse_app.bat ใหม่เพื่อโหลดระบบ Inventory', 'warning');
+          return;
+        }
+        const data = await res.json();
+        const cntEl = document.getElementById('invResultCount');
+        if (cntEl) cntEl.innerText = data.total ?? 0;
+        invLastSearchItems = data.items || [];
+        updateInvSortUI();
+        sortAndRenderInvClient();
+      } catch (err) {
+        console.error('runInvSearch error:', err);
+      }
+    }
+
+    function renderInvSearchResults(items) {
+      const tbody = document.getElementById('invStockTableBody');
       if (!tbody) return;
-
-      if (!items || items.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="9" class="p-8 text-center text-zinc-500 font-sans text-xs">
-              ${allInventoryItems.length === 0 ? 'ยังไม่มีข้อมูล Inventory — กด "ดึงสดจาก eMRO" หรือ "รีเฟรช"' : 'ไม่พบรายการที่ตรงกับเงื่อนไขการค้นหา'}
-            </td>
-          </tr>
-        `;
+      if (!items.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-10 text-center text-zinc-500 text-xs">ไม่พบรายการอะไหล่ที่ตรงกับเงื่อนไข (หากเพิ่งติดตั้งระบบ กด "Refresh ตอนนี้" เพื่อดึงข้อมูลจาก eMRO)</td></tr>`;
         return;
       }
 
-      tbody.innerHTML = items.map((r, idx) => {
-        const pn = r.pn || '-';
-        const wo = r.wo_so || '-';
-        const locBin = `${r.location || '-'} / ${r.bin || '-'}`;
-        const issuedSub = r.issued_to_name ? `<div class="text-[10px] text-zinc-500 font-sans truncate max-w-[150px]">${escapeHtml(r.issued_to_name)}</div>` : '';
-        const dateSub = r.created_name ? `<div class="text-[10px] text-zinc-500 font-sans truncate max-w-[140px]">${escapeHtml(r.created_name)}</div>` : '';
+      tbody.innerHTML = items.map(g => {
+        const isIn = g.status === 'IN_STOCK';
+        const statusBadge = isIn
+          ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> มีของ
+             </span>`
+          : `<div class="space-y-1 text-center">
+               <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                 <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> หมด (0)
+               </span>
+               <div class="text-[10px] text-rose-400/80 font-mono">หมดตั้งแต่: ${escapeHtml(g.out_since || '-')}</div>
+             </div>`;
 
-        return `
-          <tr class="hover:bg-zinc-900/60 transition">
-            <td class="p-3 whitespace-nowrap">${getInventoryTypeBadge(r.transaction_type)}</td>
-            <td class="p-3 whitespace-nowrap">
-              <button type="button" data-copy="${escapeHtml(pn)}" onclick="copyText(this.dataset.copy, this)"
-                      class="font-semibold text-zinc-100 hover:text-rose-300 transition inline-flex items-center gap-1.5 cursor-pointer" title="คลิกเพื่อคัดลอก P/N">
-                <span>${escapeHtml(pn)}</span>
-                <i class="fa-regular fa-copy text-[10px] text-zinc-500"></i>
+        let binHtml = '';
+        if (isIn) {
+          binHtml = (g.rows || []).map(r => `
+            <div class="flex flex-wrap items-center gap-1.5 py-0.5">
+              <button type="button" data-copy="${escapeHtml(r.bin)}" onclick="copyText(this.dataset.copy, this)" title="คลิกเพื่อคัดลอก Bin"
+                      class="px-2 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20 font-mono font-semibold text-[11px] cursor-pointer hover:bg-sky-500/20 transition">
+                Bin: ${escapeHtml(r.bin || '-')}
               </button>
-              ${r.batch ? `<div class="text-[10px] text-zinc-500">Batch: ${escapeHtml(r.batch)}</div>` : ''}
-            </td>
-            <td class="p-3 text-right whitespace-nowrap font-semibold text-zinc-200">${escapeHtml(r.qty || '-')}</td>
-            <td class="p-3 whitespace-nowrap text-zinc-300">${escapeHtml(locBin)}</td>
-            <td class="p-3 whitespace-nowrap text-zinc-300">${escapeHtml(r.ac || '-')}</td>
-            <td class="p-3 whitespace-nowrap">
-              ${wo !== '-'
-                ? `<button type="button" data-copy="${escapeHtml(wo)}" onclick="copyText(this.dataset.copy, this)" class="text-zinc-200 hover:text-emerald-400 transition inline-flex items-center gap-1 cursor-pointer" title="คลิกเพื่อคัดลอก W/O"><span>${escapeHtml(wo)}</span><i class="fa-regular fa-copy text-[10px] text-zinc-500"></i></button>`
-                : '<span class="text-zinc-600">-</span>'}
-            </td>
-            <td class="p-3 whitespace-nowrap text-zinc-300">
-              <div>${escapeHtml(r.issued_to || '-')}</div>
-              ${issuedSub}
-            </td>
-            <td class="p-3 whitespace-nowrap text-zinc-400 text-[11px]">
-              <div>${escapeHtml(r.created_date || '-')}</div>
-              ${dateSub}
-            </td>
-            <td class="p-3 text-right whitespace-nowrap">
-              <button type="button" onclick="openInventoryModalByIdx(${idx})"
-                      class="px-2.5 py-1 text-[11px] font-sans font-medium text-zinc-200 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-lg transition cursor-pointer">
-                ดู 30 ฟิลด์
-              </button>
-            </td>
-          </tr>
-        `;
-      }).join('');
-    }
-
-    function renderInventoryActivityLogs(logs) {
-      const section = document.getElementById('invActivityLogSection');
-      const countEl = document.getElementById('invActivityLogCount');
-      const tbody = document.getElementById('invActivityLogBody');
-      if (!section || !tbody) return;
-
-      if (!logs || logs.length === 0) {
-        section.classList.add('hidden');
-        return;
-      }
-
-      section.classList.remove('hidden');
-      if (countEl) countEl.innerText = logs.length;
-
-      tbody.innerHTML = logs.map(row => {
-        const ts = row[0] || '-';
-        const action = String(row[1] || '-').toUpperCase();
-        const tNo = row[2] || '-';
-        const tType = row[3] || '-';
-        const details = row[4] || '-';
-        const actBadge = action === 'NEW'
-          ? '<span class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">NEW</span>'
-          : '<span class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px]">UPDATED</span>';
-
-        return `
-          <tr class="hover:bg-zinc-900/50">
-            <td class="px-3.5 py-2 text-zinc-400 whitespace-nowrap">${escapeHtml(ts)}</td>
-            <td class="px-3.5 py-2 whitespace-nowrap">${actBadge}</td>
-            <td class="px-3.5 py-2 text-zinc-200 whitespace-nowrap">#${escapeHtml(tNo)}</td>
-            <td class="px-3.5 py-2 whitespace-nowrap">${getInventoryTypeBadge(tType)}</td>
-            <td class="px-3.5 py-2 text-zinc-300 font-sans">${escapeHtml(details)}</td>
-          </tr>
-        `;
-      }).join('');
-    }
-
-    function openInventoryModalByIdx(idx) {
-      const r = filteredInventoryItems[idx];
-      if (!r) return;
-
-      const modal = document.getElementById('invDetailModal');
-      const title = document.getElementById('invModalTitle');
-      const badge = document.getElementById('invModalTypeBadge');
-      const subtitle = document.getElementById('invModalSubtitle');
-      const body = document.getElementById('invModalBody');
-
-      currentInventoryModalTno = r.transaction_no || '';
-      if (title) title.innerText = r.pn || 'Part Number';
-      if (badge) badge.innerHTML = getInventoryTypeBadge(r.transaction_type);
-      if (subtitle) subtitle.innerText = `Transaction NO: ${r.transaction_no || '-'}`;
-
-      const groups = [
-        {
-          title: 'ข้อมูลอะไหล่ & สต็อก (Part & Stock)',
-          fields: [
-            ['Transaction NO', r.transaction_no, true],
-            ['Transaction Type', r.transaction_type, false],
-            ['P/N', r.pn, true],
-            ['S/N', r.sn, true],
-            ['Batch', r.batch, true],
-            ['GRB', r.grb, true],
-            ['Vendor Lot', r.vendor_lot, false],
-            ['Location', r.location, false],
-            ['Bin', r.bin, false],
-            ['Condition', r.condition, false],
-            ['QTY', r.qty, false],
-            ['Status', r.status, false],
-          ],
-        },
-        {
-          title: 'การเบิกจ่าย & ใบงาน (Issue & Work Order)',
-          fields: [
-            ['A/C', r.ac, true],
-            ['W/O - S/O', r.wo_so, true],
-            ['Issued To', r.issued_to, false],
-            ['Issued To Name', r.issued_to_name, false],
-            ['Defect Description', r.defect_description, false],
-          ],
-        },
-        {
-          title: 'คำสั่งซื้อ & ผู้ขาย (Order & Vendor)',
-          fields: [
-            ['Order Type', r.order_type, false],
-            ['Order NO', r.order_no, true],
-            ['Line', r.order_line, false],
-            ['Vendor/Customer', r.vendor_customer, false],
-            ['Vendor Name', r.vendor_name, false],
-            ['Reference', r.reference, false],
-          ],
-        },
-        {
-          title: 'ต้นทุน & ผู้ทำรายการ (Cost & Audit)',
-          fields: [
-            ['Unit Cost', r.unit_cost, false],
-            ['Secondary Cost', r.secondary_cost, false],
-            ['CUR EXC Rate', r.cur_exc_rate, false],
-            ['G/L', r.gl, false],
-            ['Created By', r.created_by, false],
-            ['Name', r.created_name, false],
-            ['Created Date', r.created_date, false],
-          ],
-        },
-      ];
-
-      if (body) {
-        body.innerHTML = groups.map(group => `
-          <section class="space-y-2">
-            <h3 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">${escapeHtml(group.title)}</h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              ${group.fields.map(([label, rawVal, copyable]) => {
-                const val = (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') ? String(rawVal) : '-';
-                const canCopy = copyable && val !== '-';
-                return `
-                  <div class="p-2.5 rounded-xl bg-[#09090B] border border-zinc-800/80 flex flex-col justify-between gap-1">
-                    <div class="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">${escapeHtml(label)}</div>
-                    <div class="flex items-center justify-between gap-2 min-w-0">
-                      <span class="font-mono text-xs ${val === '-' ? 'text-zinc-600' : 'text-zinc-100'} break-all">${escapeHtml(val)}</span>
-                      ${canCopy ? `<button type="button" data-copy="${escapeHtml(val)}" onclick="copyText(this.dataset.copy, this)" class="text-zinc-500 hover:text-white flex-shrink-0 cursor-pointer" title="คัดลอก"><i class="fa-regular fa-copy text-[10px]"></i></button>` : ''}
-                    </div>
-                  </div>
-                `;
-              }).join('')}
+              ${r.batch ? `<span class="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 font-mono text-[11px]">Batch: ${escapeHtml(r.batch)}</span>` : ''}
+              ${r.sn ? `<button type="button" data-copy="${escapeHtml(r.sn)}" onclick="copyText(this.dataset.copy, this)" class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-mono text-[11px] cursor-pointer">S/N: ${escapeHtml(r.sn)}</button>` : ''}
+              ${(g.rows || []).length > 1 ? `<span class="text-emerald-400 font-mono font-semibold text-[11px]">(${fmtInvNum(r.avbl)} ${escapeHtml(r.uom || '')})</span>` : ''}
             </div>
-          </section>
-        `).join('');
-      }
+          `).join('');
+        } else {
+          binHtml = `
+            <div class="font-mono text-xs">
+              <span class="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 text-[11px]">
+                Bin ล่าสุด: ${escapeHtml(g.last_bin || '-')}
+              </span>
+            </div>
+          `;
+        }
 
+        return `
+          <tr class="hover:bg-zinc-900/60 transition align-top ${!isIn ? 'bg-rose-950/10' : ''}">
+            <td class="p-3 whitespace-nowrap">
+              <div class="flex items-center gap-1.5">
+                <button type="button" data-copy="${escapeHtml(g.pn)}" onclick="copyText(this.dataset.copy, this)" title="คลิกเพื่อคัดลอก P/N"
+                        class="font-mono font-semibold text-sm text-zinc-100 hover:text-rose-300 cursor-pointer transition inline-flex items-center gap-1.5 text-left">
+                  <span>${escapeHtml(g.pn)}</span>
+                  <i class="fa-regular fa-copy text-[10px] text-zinc-500"></i>
+                </button>
+              </div>
+              <div class="text-[10px] font-mono text-zinc-500 mt-0.5">${escapeHtml(g.location)}</div>
+            </td>
+            <td class="p-3 text-zinc-300 max-w-md whitespace-pre-line leading-relaxed text-xs">${escapeHtml(g.description || '-')}</td>
+            <td class="p-3">${binHtml}</td>
+            <td class="p-3 text-right whitespace-nowrap font-mono">
+              <div class="text-sm font-bold ${isIn ? 'text-emerald-400' : 'text-rose-400'}">
+                ${fmtInvNum(g.total_avbl)} <span class="text-xs font-normal text-zinc-500">${escapeHtml(g.uom || '')}</span>
+              </div>
+              ${g.total_rsvd > 0 ? `<div class="text-[11px] text-amber-400">Rsvd: ${fmtInvNum(g.total_rsvd)}</div>` : ''}
+            </td>
+            <td class="p-3 text-center whitespace-nowrap">${statusBadge}</td>
+            <td class="p-3 text-center whitespace-nowrap">
+              <button type="button" data-loc="${escapeHtml(g.location)}" data-pn="${escapeHtml(g.pn)}"
+                      onclick="openInvItemHistoryModal(this.dataset.loc, this.dataset.pn)"
+                      class="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-800 hover:border-zinc-700 text-xs font-medium cursor-pointer transition">
+                <i class="fa-solid fa-clock-rotate-left mr-1 text-rose-400"></i> ดูประวัติ
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // ==================== TRANSACTION HISTORY (SUB-TAB 2) ====================
+    function onInvTxSearchInput() {
+      const inp = document.getElementById('invTxSearchInput');
+      const clearBtn = document.getElementById('invClearTxSearchBtn');
+      const val = inp ? inp.value : '';
+      if (clearBtn) clearBtn.classList.toggle('hidden', !val);
+      clearTimeout(invTxSearchTimer);
+      invTxSearchTimer = setTimeout(() => loadInvTransactions(invCurrentDays), 180);
+    }
+
+    function clearInvTxSearch() {
+      const inp = document.getElementById('invTxSearchInput');
+      const clearBtn = document.getElementById('invClearTxSearchBtn');
+      if (inp) {
+        inp.value = '';
+        inp.focus();
+      }
+      if (clearBtn) clearBtn.classList.add('hidden');
+      loadInvTransactions(invCurrentDays);
+    }
+
+    function setInvTxType(t) {
+      invCurrentTxType = t;
+      ['all', 'ISSUED', 'RECEIVING'].forEach(k => {
+        const b = document.getElementById(`invTxType-${k}`);
+        if (!b) return;
+        b.className = k === t
+          ? 'px-2.5 py-1 rounded-md text-xs font-semibold bg-zinc-100 text-zinc-950 cursor-pointer transition'
+          : 'px-2.5 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 cursor-pointer transition';
+      });
+      loadInvTransactions(invCurrentDays);
+    }
+
+    function toggleInvTxSort(field) {
+      if (invCurrentTxSortBy === field) {
+        invCurrentTxSortDir = invCurrentTxSortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        invCurrentTxSortBy = field;
+        invCurrentTxSortDir = field === 'tx_datetime' || field === 'qty' ? 'desc' : 'asc';
+      }
+      ['tx_datetime', 'transaction_type', 'pn', 'qty', 'ac', 'issued_to'].forEach(f => {
+        const el = document.getElementById(`invTxSort-${f}`);
+        if (!el) return;
+        if (f === invCurrentTxSortBy) {
+          el.innerText = invCurrentTxSortDir === 'desc' ? '▼' : '▲';
+          el.className = 'text-rose-400 font-mono';
+        } else {
+          el.innerText = '⇅';
+          el.className = 'text-zinc-500 font-mono';
+        }
+      });
+      loadInvTransactions(invCurrentDays);
+    }
+
+    function formatInvTxTypeBadge(txType) {
+      const t = String(txType || '').toUpperCase();
+      if (t.includes('ISSUED')) {
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-rose-400"></span>${escapeHtml(txType)}</span>`;
+      }
+      if (t.includes('RECEIVING')) {
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-emerald-400"></span>${escapeHtml(txType)}</span>`;
+      }
+      if (t.includes('TRANSFER')) {
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-sky-400"></span>${escapeHtml(txType)}</span>`;
+      }
+      return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-800 text-zinc-300 border border-zinc-700 whitespace-nowrap">${escapeHtml(txType || '-')}</span>`;
+    }
+
+    async function loadInvTransactions(days = 0) {
+      invCurrentDays = days;
+      [0, 1, 3, 7, 30, 90].forEach(d => {
+        const b = document.getElementById(`invChgDays-${d}`);
+        if (!b) return;
+        b.className = d === days
+          ? 'px-2.5 py-1 rounded-md text-xs font-semibold bg-zinc-100 text-zinc-950 cursor-pointer transition'
+          : 'px-2.5 py-1 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 cursor-pointer transition';
+      });
+      const inp = document.getElementById('invTxSearchInput');
+      const q = (inp ? inp.value : '').trim();
+      const url = `/api/inv/transactions?q=${encodeURIComponent(q)}&tx_type=${encodeURIComponent(invCurrentTxType)}&days=${days}&sort_by=${invCurrentTxSortBy}&sort_dir=${invCurrentTxSortDir}`;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        const items = data.items || [];
+        const cntEl = document.getElementById('invTxResultCount');
+        if (cntEl) cntEl.innerText = data.total ?? items.length;
+        const tbody = document.getElementById('invTxTableBody');
+        if (!tbody) return;
+        if (!items.length) {
+          tbody.innerHTML = `<tr><td colspan="8" class="p-10 text-center text-zinc-500 text-xs">ยังไม่มีรายการประวัติการตัดของที่ตรงกับเงื่อนไข</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = items.map(r => {
+          const isIssue = String(r.transaction_type || '').toUpperCase().includes('ISSUED');
+          const qtyColor = isIssue ? 'text-rose-400' : 'text-emerald-400';
+          const qtyPrefix = isIssue ? '-' : '+';
+          const issuedStr = (r.issued_to || r.issued_to_name)
+            ? `<div class="font-medium text-zinc-200">${escapeHtml(r.issued_to_name || '-')}</div>
+               <div class="text-[11px] font-mono text-zinc-500">${escapeHtml(r.issued_to || '')}</div>`
+            : `<span class="text-zinc-500">-</span>`;
+          const createdStr = (r.created_by || r.created_name)
+            ? `<div class="text-zinc-200">${escapeHtml(r.created_name || '-')}</div>
+               <div class="text-[11px] font-mono text-zinc-500">${escapeHtml(r.created_by || '')}</div>`
+            : `<span class="text-zinc-500">-</span>`;
+
+          return `
+            <tr class="hover:bg-zinc-900/60 transition align-top">
+              <td class="p-3 font-mono text-zinc-400 whitespace-nowrap">${escapeHtml(r.created_date || r.tx_datetime || '-')}</td>
+              <td class="p-3 whitespace-nowrap">${formatInvTxTypeBadge(r.transaction_type)}</td>
+              <td class="p-3">
+                <div class="flex items-center gap-1.5">
+                  <button type="button" data-copy="${escapeHtml(r.pn)}" onclick="copyText(this.dataset.copy, this)"
+                          class="font-mono font-semibold text-zinc-100 hover:text-rose-300 cursor-pointer inline-flex items-center gap-1.5 text-left">
+                    <span>${escapeHtml(r.pn)}</span>
+                    <i class="fa-regular fa-copy text-[10px] text-zinc-500"></i>
+                  </button>
+                </div>
+                <div class="text-zinc-400 text-[11px] max-w-xs truncate mt-0.5">${escapeHtml(r.description || '-')}</div>
+              </td>
+              <td class="p-3 text-right font-mono whitespace-nowrap">
+                <span class="text-sm font-bold ${qtyColor}">${qtyPrefix}${fmtInvNum(r.qty)}</span>
+                <span class="text-[11px] text-zinc-500">${escapeHtml(r.uom || '')}</span>
+              </td>
+              <td class="p-3 whitespace-nowrap font-mono">
+                ${r.ac && r.ac !== '-' ? `<div class="text-rose-300 font-semibold"><i class="fa-solid fa-truck-pickup mr-1 text-[10px]"></i>${escapeHtml(r.ac)}</div>` : '<div class="text-zinc-500">-</div>'}
+                ${r.wo_so && r.wo_so !== '-' ? `<div class="text-[11px] text-sky-400">W/O: <button type="button" data-copy="${escapeHtml(r.wo_so)}" onclick="copyText(this.dataset.copy, this)" class="cursor-pointer hover:underline">${escapeHtml(r.wo_so)}</button></div>` : ''}
+              </td>
+              <td class="p-3 whitespace-nowrap">${issuedStr}</td>
+              <td class="p-3 whitespace-nowrap">${createdStr}</td>
+              <td class="p-3 font-mono text-[11px] text-zinc-400 whitespace-nowrap">
+                <div>Bin: <span class="text-sky-400 font-semibold">${escapeHtml(r.bin || '-')}</span> ${r.batch && r.batch !== '-' ? `(Batch: ${escapeHtml(r.batch)})` : ''}</div>
+                <div class="text-zinc-500">Tx#: <button type="button" data-copy="${escapeHtml(r.transaction_no)}" onclick="copyText(this.dataset.copy, this)" class="cursor-pointer hover:text-zinc-200">${escapeHtml(r.transaction_no)}</button></div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('loadInvTransactions error:', err);
+      }
+    }
+
+    function downloadInvTxExcel() {
+      const q = (document.getElementById('invTxSearchInput')?.value || '').trim();
+      window.location.href = `/api/inv/export-transactions.xlsx?q=${encodeURIComponent(q)}&tx_type=${encodeURIComponent(invCurrentTxType)}&days=${invCurrentDays}&sort_by=${invCurrentTxSortBy}&sort_dir=${invCurrentTxSortDir}`;
+    }
+
+    async function loadInvChanges(days = 7) {
+      try {
+        const res = await fetch(`/api/inv/changes?days=${days || 7}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const tbody = document.getElementById('invChangesTableBody');
+        if (!tbody) return;
+        const items = data.items || [];
+        if (!items.length) {
+          tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-zinc-500">ยังไม่มีการเปลี่ยนแปลงจำนวนอะไหล่จากการเปรียบเทียบ Snapshot</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = items.map(c => {
+          let badge = '';
+          if (c.event === 'OUT') {
+            badge = `<span class="px-2 py-0.5 rounded text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">ของหมด</span>`;
+          } else if (c.event === 'NEW') {
+            badge = `<span class="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">รายการเข้าใหม่</span>`;
+          } else if (c.event === 'BACK') {
+            badge = `<span class="px-2 py-0.5 rounded text-[11px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">ของเข้าสต็อก</span>`;
+          } else {
+            const diff = Number(c.new_value || 0) - Number(c.old_value || 0);
+            badge = diff < 0
+              ? `<span class="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">เบิกออก (${diff})</span>`
+              : `<span class="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">รับเพิ่ม (+${diff})</span>`;
+          }
+          return `
+            <tr class="hover:bg-zinc-900/50 transition">
+              <td class="p-3 font-mono text-zinc-400 whitespace-nowrap">${escapeHtml(c.changed_at)}</td>
+              <td class="p-3 whitespace-nowrap">${badge}</td>
+              <td class="p-3 font-mono font-semibold text-zinc-100 whitespace-nowrap">
+                <button type="button" data-copy="${escapeHtml(c.pn)}" onclick="copyText(this.dataset.copy, this)" class="cursor-pointer hover:text-rose-300">${escapeHtml(c.pn)}</button>
+              </td>
+              <td class="p-3 text-zinc-300 max-w-md truncate">${escapeHtml(c.description || '-')}</td>
+              <td class="p-3 font-mono text-zinc-400 whitespace-nowrap">Bin: ${escapeHtml(c.bin || '-')} ${c.batch ? `(Batch: ${escapeHtml(c.batch)})` : ''}</td>
+              <td class="p-3 text-right font-mono whitespace-nowrap">
+                <span class="text-zinc-500">${escapeHtml(c.old_value || '0')}</span>
+                <i class="fa-solid fa-arrow-right mx-1.5 text-zinc-600 text-[10px]"></i>
+                <span class="font-bold text-zinc-100">${escapeHtml(c.new_value || '0')}</span>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('loadInvChanges error:', err);
+      }
+    }
+
+    async function openInvItemHistoryModal(location, pn) {
+      const pnEl = document.getElementById('invHistModalPn');
+      const modal = document.getElementById('invItemHistoryModal');
+      const body = document.getElementById('invHistModalBody');
+      if (pnEl) pnEl.innerText = pn;
       if (modal) {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
       }
-    }
+      if (body) body.innerHTML = `<div class="p-6 text-center text-zinc-400"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i> กำลังโหลดประวัติ...</div>`;
 
-    function copyInventoryModalTno() {
-      if (currentInventoryModalTno) {
-        copyText(currentInventoryModalTno, document.getElementById('invModalCopyTnoBtn'));
+      try {
+        const res = await fetch(`/api/inv/item-history?location=${encodeURIComponent(location)}&pn=${encodeURIComponent(pn)}`);
+        const data = await res.json();
+        const txs = data.transactions || [];
+        const items = data.items || [];
+
+        if (!txs.length && !items.length) {
+          if (body) body.innerHTML = `<div class="p-6 text-center text-zinc-500">ยังไม่มีประวัติการตัดของหรือการเปลี่ยนแปลงของ P/N นี้</div>`;
+          return;
+        }
+
+        let html = `
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-semibold text-rose-400 flex items-center gap-1.5">
+                <i class="fa-solid fa-file-invoice"></i>
+                <span>ประวัติการตัดของจาก eMRO (Inventory Transaction History)</span>
+              </h3>
+              <span class="font-mono text-[11px] text-zinc-500">${txs.length} รายการ</span>
+            </div>
+        `;
+        if (!txs.length) {
+          html += `<div class="p-4 rounded-xl bg-[#09090B] border border-zinc-800 text-center text-zinc-500">ยังไม่มีรายการตัดเบิกใน eMRO</div>`;
+        } else {
+          html += `<div class="space-y-2">` + txs.map(r => {
+            const isIssue = String(r.transaction_type || '').toUpperCase().includes('ISSUED');
+            const qtyColor = isIssue ? 'text-rose-400' : 'text-emerald-400';
+            const qtyPrefix = isIssue ? '-' : '+';
+            return `
+              <div class="p-3 rounded-xl bg-[#09090B] border border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div class="space-y-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    ${formatInvTxTypeBadge(r.transaction_type)}
+                    <span class="font-mono text-zinc-200 font-semibold text-xs">${escapeHtml(r.created_date || r.tx_datetime)}</span>
+                    <span class="font-mono text-[11px] text-zinc-500">Tx#: ${escapeHtml(r.transaction_no)}</span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-400">
+                    <span>Bin: <b class="font-mono text-sky-400">${escapeHtml(r.bin || '-')}</b> ${r.batch && r.batch !== '-' ? `(Batch: ${escapeHtml(r.batch)})` : ''}</span>
+                    ${r.ac && r.ac !== '-' ? `<span>รถ GSE: <b class="font-mono text-rose-300">${escapeHtml(r.ac)}</b></span>` : ''}
+                    ${r.wo_so && r.wo_so !== '-' ? `<span>W/O: <b class="font-mono text-sky-400">${escapeHtml(r.wo_so)}</b></span>` : ''}
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500">
+                    ${(r.issued_to || r.issued_to_name) ? `<span>ผู้เบิก: <b class="text-zinc-200">${escapeHtml(r.issued_to_name || '')}</b> (${escapeHtml(r.issued_to || '-')})</span>` : ''}
+                    ${(r.created_by || r.created_name) ? `<span>ผู้ตัดจ่าย: <b class="text-zinc-200">${escapeHtml(r.created_name || '')}</b> (${escapeHtml(r.created_by || '-')})</span>` : ''}
+                  </div>
+                </div>
+                <div class="font-mono text-right whitespace-nowrap">
+                  <div class="text-base font-bold ${qtyColor}">${qtyPrefix}${fmtInvNum(r.qty)} <span class="text-xs font-normal text-zinc-500">${escapeHtml(r.uom || '')}</span></div>
+                </div>
+              </div>
+            `;
+          }).join('') + `</div>`;
+        }
+        html += `</div>`;
+
+        if (items.length) {
+          html += `
+            <div class="space-y-2 pt-3 border-t border-zinc-800/80">
+              <div class="flex items-center justify-between">
+                <h3 class="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-chart-simple text-sky-400"></i>
+                  <span>ประวัติการเปลี่ยนแปลงยอดคงเหลือ (Snapshot Diff)</span>
+                </h3>
+                <span class="font-mono text-[11px] text-zinc-500">${items.length} รายการ</span>
+              </div>
+              <div class="space-y-2">
+                ${items.map(c => `
+                  <div class="p-3 rounded-xl bg-[#09090B] border border-zinc-800/80 flex items-center justify-between gap-2">
+                    <div>
+                      <div class="font-mono text-zinc-500 text-[11px]">${escapeHtml(c.changed_at)} • Bin: ${escapeHtml(c.bin || '-')} ${c.batch ? `• Batch: ${escapeHtml(c.batch)}` : ''}</div>
+                      <div class="text-zinc-200 mt-0.5 font-semibold">${escapeHtml(c.event)} (${escapeHtml(c.field || 'avbl')})</div>
+                    </div>
+                    <div class="font-mono text-sm">
+                      <span class="text-zinc-500">${escapeHtml(c.old_value || '0')}</span>
+                      <i class="fa-solid fa-arrow-right mx-1 text-zinc-600 text-xs"></i>
+                      <span class="font-bold text-emerald-400">${escapeHtml(c.new_value || '0')}</span>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        if (body) body.innerHTML = html;
+      } catch (err) {
+        if (body) body.innerHTML = `<div class="p-6 text-center text-rose-400">เกิดข้อผิดพลาดในการโหลดประวัติ: ${escapeHtml(err)}</div>`;
       }
     }
 
-    function closeInventoryModal() {
-      const modal = document.getElementById('invDetailModal');
+    function closeInvHistoryModal() {
+      const modal = document.getElementById('invItemHistoryModal');
       if (modal) {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
       }
     }
 
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        closeInventoryModal();
-      }
-    });
-
-    async function exportInventoryExcel() {
-      const itemsToExport = filteredInventoryItems.length > 0 ? filteredInventoryItems : allInventoryItems;
-      if (!itemsToExport || itemsToExport.length === 0) {
-        showInventoryBanner('ไม่มีข้อมูล Inventory สำหรับ Export', 'warning');
+    function openInvPinModal() {
+      if (!invPinRequired) {
+        triggerInvRefresh('');
         return;
       }
+      const errEl = document.getElementById('invPinError');
+      const inp = document.getElementById('invPinInput');
+      const modal = document.getElementById('invPinModal');
+      if (errEl) errEl.classList.add('hidden');
+      if (inp) inp.value = '';
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+      setTimeout(() => { if (inp) inp.focus(); }, 50);
+    }
 
-      const btn = document.getElementById('invExportBtn');
-      if (btn) btn.disabled = true;
-
-      try {
-        const res = await fetch('/api/inventory/export-excel', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: itemsToExport }),
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          showInventoryBanner(errData.error || `Export Excel ไม่สำเร็จ (HTTP ${res.status})`, 'error');
-          return;
-        }
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Inventory_Transactions_${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-      } catch (err) {
-        console.error('Export inventory Excel error:', err);
-        showInventoryBanner(`เกิดข้อผิดพลาดระหว่าง Export Excel: ${err}`, 'error');
-      } finally {
-        if (btn) btn.disabled = false;
+    function closeInvPinModal() {
+      const modal = document.getElementById('invPinModal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
       }
     }
+
+    async function submitInvRefreshPin() {
+      const inp = document.getElementById('invPinInput');
+      const pin = inp ? inp.value.trim() : '';
+      await triggerInvRefresh(pin);
+    }
+
+    async function triggerInvRefresh(pin) {
+      try {
+        const res = await fetch('/api/inv/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          if (invPinRequired) {
+            const errEl = document.getElementById('invPinError');
+            if (errEl) {
+              errEl.innerText = data.error || 'เกิดข้อผิดพลาด';
+              errEl.classList.remove('hidden');
+            }
+          } else {
+            showInvBanner(data.error || 'ไม่สามารถเริ่มดึงข้อมูลได้', 'error');
+          }
+          return;
+        }
+        closeInvPinModal();
+        hideInvBanner();
+        pollInvStatus();
+      } catch (err) {
+        showInvBanner(`เกิดข้อผิดพลาด: ${err}`, 'error');
+      }
+    }
+
+    function downloadInvExcel() {
+      if (invCurrentSubTab === 'tx') {
+        downloadInvTxExcel();
+        return;
+      }
+      const inp = document.getElementById('invStockSearchInput');
+      const q = (inp ? inp.value : '').trim();
+      window.location.href = `/api/inv/export.xlsx?q=${encodeURIComponent(q)}&status=${invCurrentStatus}&sort_by=${invCurrentSortBy}&sort_dir=${invCurrentSortDir}`;
+    }
+
+    async function pollInvStatus() {
+      try {
+        const res = await fetch('/api/inv/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        invPinRequired = !!data.pin_required;
+
+        if (Array.isArray(data.locations) && data.locations.length) {
+          const locText = document.getElementById('invLocationBadgeText');
+          if (locText) locText.innerText = data.locations.join(', ');
+        }
+        const metaEl = document.getElementById('invSyncMeta');
+        if (metaEl && data.sync_interval) {
+          metaEl.innerText = `ค้นหา Part No / Description / Bin / S/N และประวัติการตัดเบิก • ซิงก์อัตโนมัติทุก ${data.sync_interval} นาที (${data.sync_hours || '06:00–22:00'})`;
+        }
+
+        const counts = data.counts || {};
+        const navBadge = document.getElementById('inventoryTotalBadge');
+        if (navBadge) navBadge.innerText = counts.in_pns ?? counts.all_pns ?? 0;
+
+        const inPnsEl = document.getElementById('invStatInPns');
+        const inRowsEl = document.getElementById('invStatInRows');
+        const outPnsEl = document.getElementById('invStatOutPns');
+        const todayTxEl = document.getElementById('invStatTodayTx');
+        const totalTxEl = document.getElementById('invStatTotalTx');
+        if (inPnsEl) inPnsEl.innerText = counts.in_pns ?? 0;
+        if (inRowsEl) inRowsEl.innerText = `${counts.in_rows ?? 0} แถว`;
+        if (outPnsEl) outPnsEl.innerText = counts.out_pns ?? 0;
+        if (todayTxEl) todayTxEl.innerText = counts.tx_today ?? counts.today_changes ?? 0;
+        if (totalTxEl) totalTxEl.innerText = counts.tx_total ?? 0;
+
+        const startLbl = document.getElementById('invTxStartDateLabel');
+        if (startLbl && data.tx_start_date) startLbl.innerText = data.tx_start_date;
+
+        const lastOk = data.last_ok;
+        const lastSyncEl = document.getElementById('invStatLastSync');
+        const lastSyncSubEl = document.getElementById('invStatLastSyncSub');
+        if (lastOk) {
+          if (lastSyncEl) lastSyncEl.innerText = lastOk.finished_at || lastOk.started_at || '-';
+          if (lastSyncSubEl) lastSyncSubEl.innerText = `วิธี: ${lastOk.method || 'export'} • ${lastOk.row_count || 0} แถว`;
+        } else {
+          if (lastSyncEl) lastSyncEl.innerText = 'ยังไม่เคยซิงก์';
+          if (lastSyncSubEl) lastSyncSubEl.innerText = 'กด "Refresh ตอนนี้" เพื่อดึงข้อมูล';
+        }
+
+        const sync = data.sync || {};
+        const banner = document.getElementById('invSyncBanner');
+        const icon = document.getElementById('invRefreshNowIcon');
+        const btnText = document.getElementById('invRefreshNowText');
+        const btn = document.getElementById('invRefreshNowBtn');
+
+        if (sync.running) {
+          invWasRunning = true;
+          if (banner) banner.classList.remove('hidden');
+          const prog = document.getElementById('invSyncProgressText');
+          if (prog) prog.innerText = sync.progress || 'กำลังดึงข้อมูลจาก eMRO...';
+          if (icon) icon.classList.add('fa-spin');
+          if (btnText) btnText.innerText = 'กำลังซิงก์...';
+          if (btn) btn.disabled = true;
+        } else {
+          if (banner) banner.classList.add('hidden');
+          if (icon) icon.classList.remove('fa-spin');
+          if (btnText) btnText.innerText = 'Refresh ตอนนี้';
+          if (btn) btn.disabled = false;
+          if (invWasRunning) {
+            invWasRunning = false;
+            if (sync.last_error) {
+              showInvBanner(`ซิงก์ล่าสุดมีข้อผิดพลาด: ${sync.last_error}`, 'warning');
+            } else {
+              showInvBanner('อัปเดตข้อมูล Inventory จาก eMRO สำเร็จเรียบร้อยแล้ว', 'success');
+            }
+            runInvSearch();
+            if (invCurrentSubTab === 'tx') {
+              loadInvTransactions(invCurrentDays);
+              loadInvChanges(invCurrentDays || 7);
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeInvHistoryModal();
+        closeInvPinModal();
+      }
+    });
   </script>
 </body>
 </html>

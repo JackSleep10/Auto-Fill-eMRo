@@ -212,5 +212,162 @@ class TestInventoryAPI(unittest.TestCase):
         self.assertEqual(ws.cell(2, 3).value, "4.10/3.50-6 TR87")
 
 
+class TestUnifiedInventorySearchAPI(unittest.TestCase):
+    def setUp(self):
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.orig_db_file = web_app.InvConfig.DB_FILE
+        self.orig_pin = web_app.InvConfig.REFRESH_PIN
+        web_app.InvConfig.DB_FILE = Path(self.tmp_dir.name) / "inventory.db"
+        web_app.inv_db.init_db()
+        self.client = web_app.app.test_client()
+
+    def tearDown(self):
+        web_app.InvConfig.DB_FILE = self.orig_db_file
+        web_app.InvConfig.REFRESH_PIN = self.orig_pin
+        self.tmp_dir.cleanup()
+
+    def _login(self, user="TL248006"):
+        with self.client.session_transaction() as sess:
+            sess["logged_in"] = True
+            sess["user"] = user
+
+    def _seed_sample_data(self):
+        snapshot_rows = [
+            {
+                "location": "DM01",
+                "bin": "TYRE02",
+                "batch": "4897241",
+                "pn": "4.10/3.50-6 TR87",
+                "sn": "",
+                "description": "TUBE TYPE TYRE",
+                "uom": "EA",
+                "condition": "FN",
+                "avbl": 4.0,
+                "rsvd": 0.0,
+            },
+            {
+                "location": "DM01",
+                "bin": "RS-3",
+                "batch": "4766094",
+                "pn": "BOSNY-RED",
+                "sn": "",
+                "description": "SPRAY PAINT RED",
+                "uom": "EA",
+                "condition": "SV",
+                "avbl": 2.0,
+                "rsvd": 1.0,
+            },
+        ]
+        web_app.inv_db.apply_snapshot("DM01", snapshot_rows, "export", (2, 2), "2026-11-24 09:00:00", triggered_by="test")
+        # Second snapshot removes BOSNY-RED so it becomes OUT_OF_STOCK
+        web_app.inv_db.apply_snapshot("DM01", [snapshot_rows[0]], "export", (1, 1), "2026-11-24 09:30:00", triggered_by="test")
+
+        web_app.inv_db.save_transactions(
+            [
+                {
+                    "transaction_no": "41409704",
+                    "transaction_type": "ISSUED",
+                    "created_date": "11/24/2026 09:15:00",
+                    "tx_datetime": "2026-11-24 09:15:00",
+                    "location": "DM01",
+                    "bin": "RS-3",
+                    "batch": "4766094",
+                    "grb": "4766094",
+                    "pn": "BOSNY-RED",
+                    "sn": "",
+                    "condition": "SV",
+                    "qty": "2.00",
+                    "ac": "TLM-GE-004",
+                    "wo_so": "2356161",
+                    "issued_to": "TL258728",
+                    "issued_to_name": "KHANTHON CHANTHAKHOT",
+                    "created_by": "TL248006",
+                    "created_name": "BANNATHAT TATA",
+                    "status": "OPEN",
+                }
+            ],
+            location="DM01",
+            min_date_iso="",
+        )
+
+    def test_inv_status_requires_login_and_returns_summary(self):
+        resp_unauth = self.client.get("/api/inv/status")
+        self.assertEqual(resp_unauth.status_code, 401)
+
+        self._login("TL248006")
+        self._seed_sample_data()
+        resp = self.client.get("/api/inv/status")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(data["counts"]["in_pns"], 1)
+        self.assertEqual(data["counts"]["out_pns"], 1)
+        self.assertEqual(data["counts"]["tx_total"], 1)
+        self.assertIn("sync", data)
+        self.assertIn("locations", data)
+
+    def test_inv_search_filter_and_sort(self):
+        self._login("TL248006")
+        self._seed_sample_data()
+
+        r_all = self.client.get("/api/inv/search?status=all")
+        self.assertEqual(r_all.status_code, 200)
+        self.assertEqual(r_all.get_json()["total"], 2)
+
+        r_in = self.client.get("/api/inv/search?status=in&q=TYRE")
+        d_in = r_in.get_json()
+        self.assertEqual(d_in["total"], 1)
+        self.assertEqual(d_in["items"][0]["pn"], "4.10/3.50-6 TR87")
+
+        r_out = self.client.get("/api/inv/search?status=out&q=BOSNY")
+        d_out = r_out.get_json()
+        self.assertEqual(d_out["total"], 1)
+        self.assertEqual(d_out["items"][0]["pn"], "BOSNY-RED")
+        self.assertEqual(d_out["items"][0]["status"], "OUT")
+
+    def test_inv_transactions_item_history_and_changes(self):
+        self._login("TL248006")
+        self._seed_sample_data()
+
+        r_tx = self.client.get("/api/inv/transactions?q=TLM-GE-004&tx_type=ISSUED")
+        self.assertEqual(r_tx.status_code, 200)
+        d_tx = r_tx.get_json()
+        self.assertEqual(d_tx["total"], 1)
+        self.assertEqual(d_tx["items"][0]["wo_so"], "2356161")
+
+        r_hist = self.client.get("/api/inv/item-history?location=DM01&pn=BOSNY-RED")
+        self.assertEqual(r_hist.status_code, 200)
+        d_hist = r_hist.get_json()
+        self.assertGreaterEqual(len(d_hist["items"]), 1)
+        self.assertEqual(len(d_hist["transactions"]), 1)
+
+        r_chg = self.client.get("/api/inv/changes?days=7")
+        self.assertEqual(r_chg.status_code, 200)
+        self.assertGreaterEqual(r_chg.get_json()["total"], 1)
+
+    def test_inv_refresh_pin_check_403(self):
+        self._login("TL248006")
+        web_app.InvConfig.REFRESH_PIN = "654321"
+        resp = self.client.post("/api/inv/refresh", json={"pin": "000000"})
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(resp.get_json()["ok"])
+
+    def test_inv_export_xlsx_endpoints(self):
+        self._login("TL248006")
+        self._seed_sample_data()
+
+        r_stock = self.client.get("/api/inv/export.xlsx?status=all")
+        self.assertEqual(r_stock.status_code, 200)
+        self.assertTrue(r_stock.data.startswith(b"PK"))
+        wb_stock = openpyxl.load_workbook(io.BytesIO(r_stock.data))
+        self.assertEqual(wb_stock.active.cell(1, 2).value, "P/N")
+
+        r_tx = self.client.get("/api/inv/export-transactions.xlsx")
+        self.assertEqual(r_tx.status_code, 200)
+        self.assertTrue(r_tx.data.startswith(b"PK"))
+        wb_tx = openpyxl.load_workbook(io.BytesIO(r_tx.data))
+        self.assertEqual(wb_tx.active.cell(1, 3).value, "P/N")
+        self.assertEqual(wb_tx.active.cell(2, 3).value, "BOSNY-RED")
+
+
 if __name__ == "__main__":
     unittest.main()

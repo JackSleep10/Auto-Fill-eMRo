@@ -3,7 +3,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env", override=True)
+ROOT_DIR = BASE_DIR.parent
+if (ROOT_DIR / ".env").exists():
+    load_dotenv(ROOT_DIR / ".env", override=False)
+if (BASE_DIR / ".env").exists():
+    load_dotenv(BASE_DIR / ".env", override=True)
 
 
 class Config:

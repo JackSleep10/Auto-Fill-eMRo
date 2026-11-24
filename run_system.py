@@ -64,7 +64,7 @@ def main():
             pass
 
     print("=" * 66)
-    print("  THAI LION AIR - GSE WORK ORDER CREATOR")
+    print("  THAI LION AIR - GSE WORK ORDER & INVENTORY SEARCH (DM01)")
     print("=" * 66)
     print("\n  [+] กำลังเริ่มการทำงานระบบเซิร์ฟเวอร์...")
 
@@ -147,7 +147,7 @@ def main():
 
     os.system("cls" if os.name == "nt" else "clear")
     print("=" * 66)
-    print("  THAI LION AIR - GSE WORK ORDER CREATOR")
+    print("  THAI LION AIR - GSE WORK ORDER & INVENTORY SEARCH (DM01)")
     print("=" * 66)
     print(f"\n  [1] ลิงก์ภายในวงเน็ต (LAN / Wi-Fi) : http://{lan_ip}:8000")
     print("      (ลิงก์คงที่ ไม่เปลี่ยน เข้าได้ทุกเครื่องในออฟฟิศ/วงเน็ตเดียวกัน)\n")

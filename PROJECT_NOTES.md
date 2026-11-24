@@ -39,6 +39,19 @@
 
 ## 📜 2. ประวัติการแก้ไขและเหตุการณ์สำคัญ (Changelog & Incident History)
 
+### [2026-11-24] รวมระบบ `project_inventory` (Inventory Search & Transaction History) เข้าเว็บหลักและเหลือไฟล์ `.bat` เพียงไฟล์เดียว
+- **ความต้องการของผู้ใช้:**
+  - ดึงโค้ด `project_inventory/` จาก `origin/main` แล้วนำมารวมเข้ากับระบบหลัก (`web_app.py` + แท็บ Navbar) พร้อมให้กดเปิดใช้งานด้วยไฟล์ `.bat` เพียงไฟล์เดียว
+- **การแก้ไข:**
+  1. **แชร์ `.env` หลัก (`project_inventory/inventory/config.py`):** โหลด `.env` จาก Root ของโปรเจกต์ก่อนแล้วค่อยอ่าน override จาก `project_inventory/.env` (ถ้ามี) โดยยังคงเก็บ SQLite DB (`project_inventory/data/inventory.db`) และ Browser Session แยกเป็นอิสระ
+  2. **รวม Backend API และ Scheduler (`web_app.py`):** เชื่อมต่อ `inventory.db` และ `inventory.sync_worker` เข้ามาใน `web_app.py` พร้อม Endpoint ภายใต้ `/api/inv/*` (`/api/inv/status`, `/api/inv/search`, `/api/inv/item-history`, `/api/inv/transactions`, `/api/inv/changes`, `/api/inv/refresh`, `/api/inv/export.xlsx`, `/api/inv/export-transactions.xlsx`) และเริ่ม Scheduler อัตโนมัติเฉพาะตอนรันเซิร์ฟเวอร์จริง
+  3. **อัปเกรดแท็บ `คลังอะไหล่ (Inventory)` (`data/gse_dashboard.html`):** เปลี่ยนมาแสดงผล Inventory Search (ค้นหา P/N, Description, Bin, S/N, Batch, ติดตามของหมด `OUT` + Bin ล่าสุด, เรียงลำดับหลายรูปแบบ, Export Excel, Refresh พร้อม PIN Modal) คู่กับ Sub-Tab ประวัติการตัดของ (`Transaction History` + `Avbl Diff Log` + Modal ประวัติราย P/N) ในธีม Precision Dark Minimal
+  4. **รวมตัวเปิดระบบเหลือไฟล์ `.bat` เดียว (`start_gse_app.bat`):** ลบไฟล์ `.bat` และ `run_both.py` ที่ซ้ำซ้อนใน `project_inventory/` (`START_EMRO_SYSTEMS.bat`, `emro_manager.bat`, `start_inventory.bat`, `start_inventory_online.bat`, `run_both.py`) และปรับแบนเนอร์ใน `run_system.py`
+- **ผลการตรวจสอบ:**
+  - ขยายชุดทดสอบใน [tests/test_inventory_api.py](file:///d:/Project%20Auto-fill-Emro/tests/test_inventory_api.py) และรัน `.\.venv\Scripts\python.exe -m unittest discover -s tests -v` ผ่านครบ **20/20** รายการ
+  - ทดสอบเปิดใช้งานผ่าน Playwright (`1440×900` และ `390×844` บนพอร์ตทดสอบ `8011`) ทั้งหน้า Search, Transaction History และ Modal ประวัติราย P/N พบ `0` console/page errors และไม่ล้นขอบจอ
+  - ตรวจสอบไฟล์ `.bat` ทั้งโปรเจกต์เหลือเพียง `start_gse_app.bat` ไฟล์เดียว (ไม่นับ `.venv`)
+
 ### [2026-11-20] เพิ่มแท็บ "คลังอะไหล่ (Inventory)" บน Navbar (`web_app.py`, `data/gse_dashboard.html`, `scraper/emro_scraper.py`)
 - **ความต้องการของผู้ใช้:**
   - เพิ่มหน้า **Inventory Transaction Monitor & Search** เข้ามาในแท็บ Navbar ของเว็บหลัก (`web_app.py`) เพื่อให้เข้าไปเช็กข้อมูลและตรวจสอบการแก้ไขได้สะดวกในที่เดียว
