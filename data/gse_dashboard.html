@@ -1189,7 +1189,7 @@
       </p>
       <input id="invPinInput" type="password" inputmode="numeric" placeholder="กรอกรหัส PIN..."
              onkeydown="if (event.key === 'Enter') submitInvRefreshPin()"
-             class="w-full px-3.5 py-2.5 rounded-xl bg-[#09090B] border border-zinc-800 focus:border-zinc-500 focus:outline-none text-center font-mono text-base tracking-widest text-zinc-100" />
+             class="w-full px-3.5 py-2.5 rounded-lg bg-[#09090B] border border-zinc-800 focus:border-zinc-500 focus:outline-none text-center font-mono text-base tracking-widest text-zinc-100" />
       <div id="invPinError" class="hidden text-xs text-rose-400 font-medium text-center"></div>
       <div class="flex items-center justify-end gap-2">
         <button type="button" onclick="closeInvPinModal()" class="px-3.5 py-2 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 cursor-pointer">ยกเลิก</button>
@@ -3246,14 +3246,14 @@
             </div>
         `;
         if (!txs.length) {
-          html += `<div class="p-4 rounded-xl bg-[#09090B] border border-zinc-800 text-center text-zinc-500">ยังไม่มีรายการตัดเบิกใน eMRO</div>`;
+          html += `<div class="py-6 text-center text-zinc-500 border-t border-zinc-800/70">ยังไม่มีรายการตัดเบิกใน eMRO</div>`;
         } else {
-          html += `<div class="space-y-2">` + txs.map(r => {
+          html += `<div class="divide-y divide-zinc-800/70 border-t border-zinc-800/70">` + txs.map(r => {
             const isIssue = String(r.transaction_type || '').toUpperCase().includes('ISSUED');
             const qtyColor = isIssue ? 'text-rose-400' : 'text-emerald-400';
             const qtyPrefix = isIssue ? '-' : '+';
             return `
-              <div class="p-3 rounded-xl bg-[#09090B] border border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div class="space-y-1">
                   <div class="flex flex-wrap items-center gap-2">
                     ${formatInvTxTypeBadge(r.transaction_type)}
@@ -3289,9 +3289,9 @@
                 </h3>
                 <span class="font-mono text-[11px] text-zinc-500">${items.length} รายการ</span>
               </div>
-              <div class="space-y-2">
+              <div class="divide-y divide-zinc-800/70 border-t border-zinc-800/70">
                 ${items.map(c => `
-                  <div class="p-3 rounded-xl bg-[#09090B] border border-zinc-800/80 flex items-center justify-between gap-2">
+                  <div class="py-3 flex items-center justify-between gap-2">
                     <div>
                       <div class="font-mono text-zinc-500 text-[11px]">${escapeHtml(c.changed_at)} • Bin: ${escapeHtml(c.bin || '-')} ${c.batch ? `• Batch: ${escapeHtml(c.batch)}` : ''}</div>
                       <div class="text-zinc-200 mt-0.5 font-semibold">${escapeHtml(c.event)} (${escapeHtml(c.field || 'avbl')})</div>
